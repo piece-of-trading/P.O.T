@@ -330,25 +330,60 @@ function toast(msg) {
   toastTimer = setTimeout(() => t.classList.remove("show"), 2400);
 }
 
-/* ---------------- 시세 (업비트) ---------------- */
+/* ---------------- 시세 (업비트) ----------------
+   1순위: 브라우저에서 업비트에 바로 요청
+   2순위: 막히면 Supabase 의 upbit 함수를 거쳐서 요청 (한 번 막히면 그 뒤로는 계속 2순위) */
+let upbitMode = "direct";
+async function upbitGet(path, params = {}) {
+  const qs = Object.entries(params).map(([k, v]) => `${k}=${v}`).join("&");
+  if (upbitMode === "direct") {
+    try {
+      const r = await fetch(`${UPBIT}/${path}${qs ? "?" + qs : ""}`);
+      if (r.ok) return await r.json();
+      if (r.status === 429) throw Object.assign(new Error("요청이 너무 많아요"), { keep: true });
+      throw new Error("HTTP " + r.status);
+    } catch (e) {
+      if (e.keep || !configured) throw e;
+      upbitMode = "proxy";
+    }
+  }
+  const r = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/upbit?path=${encodeURIComponent(path)}${qs ? "&" + qs : ""}`,
+    { headers: { apikey: CONFIG.SUPABASE_KEY } });
+  if (!r.ok) throw new Error("중계 함수 응답 " + r.status);
+  return await r.json();
+}
+
+async function loadTickers() {
+  const codes = [...state.markets.keys()];
+  for (let i = 0; i < codes.length; i += 100) {
+    const t = await upbitGet("ticker", { markets: codes.slice(i, i + 100).join(",") });
+    t.forEach(applyTicker);
+  }
+}
+
 async function loadMarkets() {
   try {
-    const list = await (await fetch(UPBIT + "/market/all?isDetails=false")).json();
+    const list = await upbitGet("market/all", { isDetails: "false" });
     list.filter((m) => m.market.startsWith("KRW-")).forEach((m) =>
       state.markets.set(m.market, { code: m.market, ko: m.korean_name, en: m.english_name }));
-    const codes = [...state.markets.keys()];
-    for (let i = 0; i < codes.length; i += 100) {
-      const t = await (await fetch(UPBIT + "/ticker?markets=" + codes.slice(i, i + 100).join(","))).json();
-      t.forEach(applyTicker);
-    }
-    state.order = codes.sort((a, b) => (state.tickers.get(b)?.vol || 0) - (state.tickers.get(a)?.vol || 0));
+    await loadTickers();
+    state.order = [...state.markets.keys()]
+      .sort((a, b) => (state.tickers.get(b)?.vol || 0) - (state.tickers.get(a)?.vol || 0));
+    state.marketError = false;
     connectWS();
   } catch (e) {
-    state.marketError = true;
+    state.marketError = e.message || "알 수 없는 오류";
   }
   renderMarket();
   renderWatch();
 }
+
+// 실시간 연결이 안 될 때는 15초마다 현재가를 새로 받아요 (화면을 보고 있을 때만)
+setInterval(async () => {
+  if (document.visibilityState !== "visible" || !state.markets.size) return;
+  if (state.ws && state.ws.readyState === 1) return;
+  try { await loadTickers(); schedulePriceUpdate(); } catch (_) {}
+}, 15000);
 
 function applyTicker(t) {
   const code = t.market || t.code;
@@ -455,7 +490,7 @@ async function loadSparks() {
   for (const w of state.watch) {
     if (state.spark.has(w.code)) { drawSpark(w.code); continue; }
     try {
-      const c = await (await fetch(`${UPBIT}/candles/minutes/60?market=${w.code}&count=24`)).json();
+      const c = await upbitGet("candles/minutes/60", { market: w.code, count: 24 });
       if (Array.isArray(c)) {
         state.spark.set(w.code, c.reverse().map((x) => x.trade_price));
         drawSpark(w.code);
@@ -478,7 +513,7 @@ async function loadDetailChart() {
   wrap.innerHTML = `<div class="skeleton" style="height:200px"></div>`;
   try {
     const r = RANGES[range];
-    const c = await (await fetch(`${UPBIT}/candles/${r.path}?market=${code}&count=${r.count}`)).json();
+    const c = await upbitGet("candles/" + r.path, { market: code, count: r.count });
     if (state.detail !== code || state.range !== range) return;
     if (!Array.isArray(c) || c.length < 2) throw new Error();
     const vals = c.reverse().map((x) => x.trade_price);
@@ -562,7 +597,9 @@ function renderWatch() {
     body.innerHTML = `<div class="empty">아직 담은 코인이 없어요.<br><br><button class="btn" data-goto="market">코인 찾으러 가기</button></div>`;
     return;
   }
-  body.innerHTML = `<div class="cards">${state.watch.map((w) => `
+  const warn = state.marketError
+    ? `<div class="notice">시세를 불러오지 못하고 있어요. 코인 찾기 탭에서 ‘다시 시도’를 눌러 주세요.</div>` : "";
+  body.innerHTML = warn + `<div class="cards">${state.watch.map((w) => `
     <button class="card" data-open="${w.code}">
       <div class="card-top">
         <div><div class="name">${esc(w.name)}</div><div class="sym">${symOf(w.code)}</div></div>
@@ -585,7 +622,11 @@ function rowHTML(code) {
 }
 function renderMarket() {
   const body = $("#marketBody");
-  if (state.marketError) { body.innerHTML = `<div class="empty">시세를 불러오지 못했어요. 잠시 후 새로고침해 주세요.</div>`; return; }
+  if (state.marketError) {
+    body.innerHTML = `<div class="empty">시세를 불러오지 못했어요. 잠시 후 새로고침해 주세요.<br>
+      <small>(${esc(state.marketError)})</small><br><br><button class="btn ghost" data-action="retry">다시 시도</button></div>`;
+    return;
+  }
   if (!state.order.length) { body.innerHTML = `<div class="skeleton"></div>`; return; }
   const q = $("#q").value.trim().toLowerCase();
   const codes = q
@@ -746,6 +787,7 @@ document.addEventListener("click", (e) => {
   if (el.dataset.tab) return setTab(el.dataset.tab);
   if (el.dataset.goto) return setTab(el.dataset.goto);
   if (el.dataset.action === "login") return openSheet("auth");
+  if (el.dataset.action === "retry") { state.marketError = false; renderMarket(); return loadMarkets(); }
   if (el.hasAttribute("data-close")) return closeSheets();
   if (el.dataset.range) {
     state.range = el.dataset.range;
