@@ -192,7 +192,7 @@ nav button.on{color:var(--text)}
     <div id="newsBody"></div>
   </section>
 
-  <p class="disclaimer">시세: 업비트 · 뉴스: 네이버 뉴스 검색<br>이 사이트는 정보 제공용이며 투자 권유가 아니에요.</p>
+  <p class="disclaimer">시세: 업비트 · 뉴스: 블록미디어, 토큰포스트, 한국경제 RSS (기사 저작권은 각 언론사에 있어요)<br>이 사이트는 정보 제공용이며 투자 권유가 아니에요.</p>
 </main>
 
 <nav>
@@ -637,7 +637,8 @@ async function refreshNews() {
     try { const j = await error.context.json(); if (j.error) msg = j.error; } catch (_) {}
     toast("뉴스를 가져오지 못했어요: " + msg);
   } else {
-    toast(`뉴스 ${data.saved}건을 확인했어요`);
+    if (!data.feeds && data.skipped) toast("방금 새로 가져왔어요. 3분 뒤에 다시 눌러 주세요");
+    else toast(data.saved ? `관련 뉴스 ${data.saved}건을 찾았어요` : "새로 나온 관련 뉴스가 없어요");
   }
   btn.disabled = false;
   btn.textContent = "새로 가져오기";
