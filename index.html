@@ -1,0 +1,776 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f6f7f9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f1115" media="(prefers-color-scheme: dark)">
+<title>내 관심 자산</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<style>
+:root{
+  --bg:#f6f7f9; --surface:#ffffff; --surface-2:#eef0f3; --text:#14171c; --muted:#6b7280;
+  --line:#e4e7ec; --up:#e03131; --up-bg:#fdecec; --down:#2563eb; --down-bg:#e8effd;
+  --accent:#14171c; --accent-text:#ffffff; --live:#16a34a; --shadow:0 1px 2px rgba(16,24,40,.06);
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0f1115; --surface:#171a21; --surface-2:#20242d; --text:#eef0f3; --muted:#8c94a3;
+    --line:#272b35; --up:#ff6266; --up-bg:#3a1d20; --down:#5b95ff; --down-bg:#1a2742;
+    --accent:#eef0f3; --accent-text:#0f1115; --live:#22c55e; --shadow:none;
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  background:var(--bg); color:var(--text);
+  font-family:Pretendard,-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased; -webkit-tap-highlight-color:transparent;
+}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+input{font:inherit;color:inherit}
+.num{font-variant-numeric:tabular-nums}
+.wrap{max-width:560px;margin:0 auto;padding:0 16px calc(96px + env(safe-area-inset-bottom))}
+
+/* 상단 */
+header{
+  position:sticky;top:0;z-index:10;background:color-mix(in srgb,var(--bg) 88%,transparent);
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  padding:calc(env(safe-area-inset-top) + 12px) 0 10px;
+}
+.head{max-width:560px;margin:0 auto;padding:0 16px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.brand{font-size:20px;font-weight:800;letter-spacing:-.02em}
+.live{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);margin-left:8px;font-weight:500}
+.live i{width:7px;height:7px;border-radius:50%;background:var(--muted)}
+.live.on i{background:var(--live);box-shadow:0 0 0 3px color-mix(in srgb,var(--live) 25%,transparent)}
+.pill{font-size:13px;font-weight:600;padding:8px 12px;border-radius:999px;background:var(--surface-2)}
+
+/* 공통 */
+h2{font-size:15px;font-weight:700;margin:18px 2px 10px;color:var(--muted)}
+.notice{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px;margin:12px 0;line-height:1.55;font-size:14px}
+.notice b{display:block;font-size:16px;margin-bottom:4px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:46px;padding:0 18px;border-radius:12px;background:var(--accent);color:var(--accent-text);font-weight:700}
+.btn.ghost{background:var(--surface-2);color:var(--text)}
+.btn.full{width:100%}
+.btn:disabled{opacity:.5}
+.empty{text-align:center;color:var(--muted);padding:40px 12px;font-size:14px;line-height:1.6}
+.up{color:var(--up)} .down{color:var(--down)} .flat{color:var(--muted)}
+.badge{display:inline-block;font-size:13px;font-weight:700;padding:3px 8px;border-radius:8px}
+.badge.up{background:var(--up-bg)} .badge.down{background:var(--down-bg)} .badge.flat{background:var(--surface-2)}
+
+/* 관심목록 카드 */
+.cards{display:grid;gap:10px}
+.card{display:block;width:100%;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:14px 14px 10px;box-shadow:var(--shadow)}
+.card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.card .name{font-size:16px;font-weight:700}
+.card .sym{font-size:12px;color:var(--muted);margin-top:2px}
+.card .right{text-align:right}
+.card .px{font-size:18px;font-weight:800;letter-spacing:-.01em;display:block;margin-bottom:4px}
+.spark{display:block;width:100%;height:36px;margin-top:8px}
+.spark path{fill:none;stroke-width:1.6;vector-effect:non-scaling-stroke;stroke-linejoin:round}
+
+/* 코인 찾기 */
+.search{position:sticky;top:calc(env(safe-area-inset-top) + 56px);z-index:5;background:var(--bg);padding:6px 0 10px}
+.search input{width:100%;height:46px;border-radius:12px;border:1px solid var(--line);background:var(--surface);padding:0 14px;font-size:16px;outline:none}
+.search input:focus{border-color:var(--accent)}
+.list{background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.row{display:flex;align-items:center;gap:10px;padding:12px 6px 12px 14px;border-top:1px solid var(--line)}
+.row:first-child{border-top:0}
+.row .r-name{flex:1;min-width:0;text-align:left}
+.row .r-name b{display:block;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .r-name span{font-size:12px;color:var(--muted)}
+.row .r-px{text-align:right}
+.row .r-px .px{display:block;font-weight:700;font-size:15px}
+.row .r-px .pct{font-size:12px;font-weight:600}
+.star{width:40px;height:40px;border-radius:10px;font-size:20px;color:var(--line);flex:none}
+.star.on{color:#f5b301}
+
+/* 뉴스 */
+.news-item{display:block;text-decoration:none;color:inherit;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:10px}
+.news-item .t{font-size:15px;font-weight:700;line-height:1.45}
+.news-item .s{font-size:13px;color:var(--muted);line-height:1.5;margin-top:6px}
+.news-item .m{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12px;color:var(--muted);margin-top:10px}
+.chip{background:var(--surface-2);color:var(--text);border-radius:6px;padding:2px 7px;font-weight:600}
+.news-bar{display:flex;align-items:center;justify-content:space-between;margin:14px 2px 10px}
+.news-bar h2{margin:0}
+
+/* 하단 탭 */
+nav{
+  position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--surface);border-top:1px solid var(--line);
+  padding-bottom:env(safe-area-inset-bottom);
+}
+nav .tabs{max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(3,1fr)}
+nav button{height:58px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:12px;font-weight:600;color:var(--muted)}
+nav button svg{width:22px;height:22px}
+nav button.on{color:var(--text)}
+
+/* 시트 */
+.backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:30;display:none}
+.backdrop.open{display:block}
+.sheet{
+  position:fixed;left:0;right:0;bottom:0;z-index:31;background:var(--surface);border-radius:20px 20px 0 0;
+  max-width:560px;margin:0 auto;padding:10px 16px calc(20px + env(safe-area-inset-bottom));
+  transform:translateY(105%);transition:transform .25s ease;max-height:90vh;overflow:auto;
+}
+.sheet.open{transform:none}
+.grab{width:40px;height:4px;border-radius:2px;background:var(--line);margin:0 auto 14px}
+.sheet-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.sheet-head .name{font-size:20px;font-weight:800}
+.sheet-head .sym{font-size:13px;color:var(--muted)}
+.close{width:36px;height:36px;border-radius:50%;background:var(--surface-2);font-size:18px;flex:none}
+.big-px{font-size:30px;font-weight:800;letter-spacing:-.02em;margin-top:12px}
+.ranges{display:flex;gap:6px;margin:14px 0 8px;background:var(--surface-2);padding:4px;border-radius:12px}
+.ranges button{flex:1;height:34px;border-radius:9px;font-size:13px;font-weight:700;color:var(--muted)}
+.ranges button.on{background:var(--surface);color:var(--text);box-shadow:var(--shadow)}
+.chart{width:100%;height:200px;display:block}
+.chart .area{stroke:none}
+.chart .line{fill:none;stroke-width:2;vector-effect:non-scaling-stroke;stroke-linejoin:round}
+.chart-wrap{position:relative;min-height:200px}
+.chart-label{position:absolute;font-size:11px;color:var(--muted);font-weight:600}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0 16px}
+.stat{background:var(--surface-2);border-radius:12px;padding:10px 12px}
+.stat span{display:block;font-size:12px;color:var(--muted)}
+.stat b{font-size:15px}
+
+/* 로그인 */
+.field{display:block;margin-bottom:10px}
+.field span{display:block;font-size:13px;color:var(--muted);margin-bottom:6px;font-weight:600}
+.field input{width:100%;height:48px;border-radius:12px;border:1px solid var(--line);background:var(--bg);padding:0 14px;font-size:16px;outline:none}
+.field input:focus{border-color:var(--accent)}
+.switch{display:block;margin:14px auto 0;font-size:14px;color:var(--muted);text-decoration:underline}
+
+.toast{
+  position:fixed;left:50%;bottom:calc(76px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(20px);
+  background:var(--accent);color:var(--accent-text);padding:11px 16px;border-radius:12px;font-size:14px;font-weight:600;
+  opacity:0;transition:all .2s;z-index:50;max-width:calc(100% - 32px);text-align:center;pointer-events:none;
+}
+.toast.show{opacity:1;transform:translateX(-50%)}
+.disclaimer{font-size:12px;color:var(--muted);text-align:center;line-height:1.6;margin:28px 8px 0}
+.skeleton{height:96px;border-radius:16px;background:var(--surface);border:1px solid var(--line);animation:pulse 1.2s infinite ease-in-out}
+@keyframes pulse{50%{opacity:.5}}
+@keyframes flashUp{from{background:var(--up-bg)}to{background:transparent}}
+@keyframes flashDown{from{background:var(--down-bg)}to{background:transparent}}
+.px.fu{animation:flashUp .6s}
+.px.fd{animation:flashDown .6s}
+.px{border-radius:4px}
+.hidden{display:none !important}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="head">
+    <div><span class="brand">내 관심 자산</span><span class="live" id="live"><i></i><span>연결 중</span></span></div>
+    <button class="pill" id="accountBtn">로그인</button>
+  </div>
+</header>
+
+<main class="wrap">
+  <div id="setupNotice" class="notice hidden">
+    <b>Supabase 연결 정보가 아직 없어요</b>
+    index.html 맨 아래 CONFIG 부분에 Project URL과 Publishable key를 넣어 주세요. 그 전에도 코인 시세는 볼 수 있어요.
+  </div>
+
+  <!-- 관심목록 -->
+  <section id="tab-watch">
+    <h2 id="watchTitle">관심 코인</h2>
+    <div id="watchBody"></div>
+  </section>
+
+  <!-- 코인 찾기 -->
+  <section id="tab-market" class="hidden">
+    <div class="search"><input id="q" type="search" placeholder="코인 이름이나 기호 검색 (예: 비트, BTC)" autocomplete="off"></div>
+    <div id="marketBody"></div>
+  </section>
+
+  <!-- 뉴스 -->
+  <section id="tab-news" class="hidden">
+    <div class="news-bar">
+      <h2>관심 코인 뉴스</h2>
+      <button class="pill" id="newsRefresh">새로 가져오기</button>
+    </div>
+    <div id="newsBody"></div>
+  </section>
+
+  <p class="disclaimer">시세: 업비트 · 뉴스: 네이버 뉴스 검색<br>이 사이트는 정보 제공용이며 투자 권유가 아니에요.</p>
+</main>
+
+<nav>
+  <div class="tabs">
+    <button data-tab="watch" class="on">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/></svg>관심목록
+    </button>
+    <button data-tab="market">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>코인 찾기
+    </button>
+    <button data-tab="news">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9h10M7 13h10M7 17h6"/></svg>뉴스
+    </button>
+  </div>
+</nav>
+
+<!-- 코인 상세 시트 -->
+<div class="backdrop" id="backdrop"></div>
+<div class="sheet" id="detailSheet" role="dialog" aria-modal="true">
+  <div class="grab"></div>
+  <div class="sheet-head">
+    <div><div class="name" id="dName"></div><div class="sym" id="dSym"></div></div>
+    <button class="close" data-close aria-label="닫기">✕</button>
+  </div>
+  <div class="big-px num"><span class="px" id="dPx"></span></div>
+  <div><span class="badge pct num" id="dPct"></span> <span class="sym" style="font-size:12px;color:var(--muted)">전일 대비</span></div>
+  <div class="ranges" id="ranges"></div>
+  <div class="chart-wrap" id="chartWrap"></div>
+  <div class="stats">
+    <div class="stat"><span>24시간 거래대금</span><b class="num" id="dVol">-</b></div>
+    <div class="stat"><span>기간 고가 / 저가</span><b class="num" id="dHL">-</b></div>
+  </div>
+  <button class="btn full" id="dToggle"></button>
+</div>
+
+<!-- 로그인 시트 -->
+<div class="sheet" id="authSheet" role="dialog" aria-modal="true">
+  <div class="grab"></div>
+  <div class="sheet-head">
+    <div class="name" id="authTitle" style="font-size:20px;font-weight:800">로그인</div>
+    <button class="close" data-close aria-label="닫기">✕</button>
+  </div>
+  <p style="color:var(--muted);font-size:14px;margin:6px 0 16px">관심목록과 뉴스는 로그인하면 저장돼요.</p>
+  <form id="authForm">
+    <label class="field"><span>이메일</span><input id="email" type="email" autocomplete="email" required></label>
+    <label class="field"><span>비밀번호 (6자 이상)</span><input id="password" type="password" autocomplete="current-password" minlength="6" required></label>
+    <button class="btn full" id="authSubmit" type="submit">로그인</button>
+  </form>
+  <button class="switch" id="authSwitch">처음이신가요? 회원가입</button>
+</div>
+
+<!-- 계정 시트 -->
+<div class="sheet" id="accountSheet" role="dialog" aria-modal="true">
+  <div class="grab"></div>
+  <div class="sheet-head">
+    <div><div class="name" style="font-size:18px">내 계정</div><div class="sym" id="accEmail"></div></div>
+    <button class="close" data-close aria-label="닫기">✕</button>
+  </div>
+  <div style="height:16px"></div>
+  <button class="btn ghost full" id="logoutBtn">로그아웃</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+/* =====================================================================
+   설정: Supabase 대시보드 > Project Settings > API (또는 API Keys) 에서 복사
+   - SUPABASE_URL : Project URL  (https://xxxx.supabase.co)
+   - SUPABASE_KEY : Publishable key (sb_publishable_...) 또는 anon key
+   이 두 값은 공개돼도 괜찮은 키예요. service_role / secret 키는 절대 넣지 마세요.
+   ===================================================================== */
+const CONFIG = {
+  SUPABASE_URL: "https://cguccuwngmhzwxvjtqpm.supabase.co",
+  SUPABASE_KEY: "sb_publishable_rDWebt2uA8Pg5YPPbiDTaQ_92qJuYut",
+};
+
+const UPBIT = "https://api.upbit.com/v1";
+const configured = !CONFIG.SUPABASE_URL.startsWith("여기") && !CONFIG.SUPABASE_KEY.startsWith("여기");
+const sb = configured ? window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY) : null;
+
+const state = {
+  session: null,
+  markets: new Map(),   // "KRW-BTC" -> { code, ko, en }
+  order: [],            // 거래대금 순 코드 목록
+  tickers: new Map(),   // "KRW-BTC" -> { price, rate, vol }
+  watch: [],            // [{ asset_id, code, name }]
+  spark: new Map(),     // code -> [가격...]
+  tab: "watch",
+  watchLoaded: false,
+  marketError: false,
+  authMode: "login",
+  detail: null,
+  range: "1D",
+  ws: null,
+};
+
+const $ = (s) => document.querySelector(s);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const symOf = (code) => code.replace("KRW-", "");
+
+function fmtPrice(p) {
+  if (p == null || isNaN(p)) return "-";
+  if (p >= 100) return Math.round(p).toLocaleString("ko-KR");
+  if (p >= 1) return p.toLocaleString("ko-KR", { maximumFractionDigits: 2 });
+  return p.toLocaleString("ko-KR", { maximumSignificantDigits: 4 });
+}
+function fmtPct(r) {
+  if (r == null || isNaN(r)) return "-";
+  const v = r * 100;
+  return (v > 0 ? "+" : "") + v.toFixed(2) + "%";
+}
+const dir = (r) => (r > 0 ? "up" : r < 0 ? "down" : "flat");
+function fmtKRW(v) {
+  if (!v) return "-";
+  if (v >= 1e12) return (v / 1e12).toFixed(1) + "조원";
+  if (v >= 1e8) return Math.round(v / 1e8).toLocaleString("ko-KR") + "억원";
+  if (v >= 1e4) return Math.round(v / 1e4).toLocaleString("ko-KR") + "만원";
+  return Math.round(v).toLocaleString("ko-KR") + "원";
+}
+function ago(iso) {
+  const m = (Date.now() - new Date(iso).getTime()) / 60000;
+  if (m < 1) return "방금";
+  if (m < 60) return Math.floor(m) + "분 전";
+  if (m < 1440) return Math.floor(m / 60) + "시간 전";
+  return Math.floor(m / 1440) + "일 전";
+}
+let toastTimer;
+function toast(msg) {
+  const t = $("#toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("show"), 2400);
+}
+
+/* ---------------- 시세 (업비트) ---------------- */
+async function loadMarkets() {
+  try {
+    const list = await (await fetch(UPBIT + "/market/all?isDetails=false")).json();
+    list.filter((m) => m.market.startsWith("KRW-")).forEach((m) =>
+      state.markets.set(m.market, { code: m.market, ko: m.korean_name, en: m.english_name }));
+    const codes = [...state.markets.keys()];
+    for (let i = 0; i < codes.length; i += 100) {
+      const t = await (await fetch(UPBIT + "/ticker?markets=" + codes.slice(i, i + 100).join(","))).json();
+      t.forEach(applyTicker);
+    }
+    state.order = codes.sort((a, b) => (state.tickers.get(b)?.vol || 0) - (state.tickers.get(a)?.vol || 0));
+    connectWS();
+  } catch (e) {
+    state.marketError = true;
+  }
+  renderMarket();
+  renderWatch();
+}
+
+function applyTicker(t) {
+  const code = t.market || t.code;
+  if (!code) return;
+  state.tickers.set(code, { price: t.trade_price, rate: t.signed_change_rate, vol: t.acc_trade_price_24h });
+}
+
+let wsRetry = 0;
+function setLive(on, text) {
+  $("#live").classList.toggle("on", on);
+  $("#live span").textContent = text || (on ? "실시간" : "연결 끊김");
+}
+function connectWS() {
+  if (!state.markets.size) return;
+  if (state.ws && state.ws.readyState <= 1) return;
+  const ws = new WebSocket("wss://api.upbit.com/websocket/v1");
+  ws.binaryType = "blob";
+  state.ws = ws;
+  ws.onopen = () => {
+    wsRetry = 0;
+    ws.send(JSON.stringify([
+      { ticket: "w-" + Math.random().toString(36).slice(2) },
+      { type: "ticker", codes: [...state.markets.keys()], isOnlyRealtime: true },
+    ]));
+    setLive(true);
+  };
+  ws.onmessage = async (ev) => {
+    try {
+      const txt = typeof ev.data === "string" ? ev.data : await ev.data.text();
+      applyTicker(JSON.parse(txt));
+      schedulePriceUpdate();
+    } catch (_) {}
+  };
+  ws.onclose = () => {
+    if (state.ws !== ws) return;
+    state.ws = null;
+    setLive(false);
+    if (document.visibilityState === "visible") setTimeout(connectWS, Math.min(30000, 1000 * 2 ** wsRetry++));
+  };
+  ws.onerror = () => ws.close();
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && !state.ws) connectWS();
+});
+
+let priceFrame = 0;
+function schedulePriceUpdate() {
+  if (priceFrame) return;
+  priceFrame = requestAnimationFrame(() => { priceFrame = 0; updatePrices(); });
+}
+// 화면에 있는 가격만 제자리에서 갱신
+function updatePrices() {
+  document.querySelectorAll("[data-px]").forEach((el) => {
+    const t = state.tickers.get(el.dataset.px);
+    if (!t) return;
+    const txt = fmtPrice(t.price);
+    if (el.textContent !== txt) {
+      const prev = parseFloat(el.dataset.v || "0");
+      el.textContent = txt;
+      el.dataset.v = t.price;
+      if (prev) {
+        el.classList.remove("fu", "fd");
+        void el.offsetWidth;
+        el.classList.add(t.price > prev ? "fu" : "fd");
+      }
+    }
+  });
+  document.querySelectorAll("[data-pct]").forEach((el) => {
+    const t = state.tickers.get(el.dataset.pct);
+    if (!t) return;
+    el.textContent = fmtPct(t.rate);
+    el.classList.remove("up", "down", "flat");
+    el.classList.add(dir(t.rate));
+  });
+  if (state.detail) {
+    const t = state.tickers.get(state.detail);
+    if (t) $("#dVol").textContent = fmtKRW(t.vol);
+  }
+}
+
+function pxSpan(code, cls = "px num") {
+  const t = state.tickers.get(code);
+  return `<span class="${cls}" data-px="${code}" data-v="${t?.price || ""}">${fmtPrice(t?.price)}</span>`;
+}
+function pctSpan(code, cls = "pct num") {
+  const t = state.tickers.get(code);
+  return `<span class="${cls} ${dir(t?.rate)}" data-pct="${code}">${fmtPct(t?.rate)}</span>`;
+}
+
+/* ---------------- 차트 ---------------- */
+function linePath(vals, w, h, pad) {
+  const min = Math.min(...vals), max = Math.max(...vals), span = max - min || 1;
+  return vals.map((v, i) =>
+    `${i ? "L" : "M"}${(i / (vals.length - 1) * w).toFixed(2)},${(pad + (h - 2 * pad) * (1 - (v - min) / span)).toFixed(2)}`).join("");
+}
+function drawSpark(code) {
+  const vals = state.spark.get(code);
+  const svg = document.querySelector(`[data-spark="${code}"]`);
+  if (!svg || !vals || vals.length < 2) return;
+  const color = vals[vals.length - 1] >= vals[0] ? "var(--up)" : "var(--down)";
+  svg.innerHTML = `<path d="${linePath(vals, 100, 30, 2)}" style="stroke:${color}"/>`;
+}
+async function loadSparks() {
+  for (const w of state.watch) {
+    if (state.spark.has(w.code)) { drawSpark(w.code); continue; }
+    try {
+      const c = await (await fetch(`${UPBIT}/candles/minutes/60?market=${w.code}&count=24`)).json();
+      if (Array.isArray(c)) {
+        state.spark.set(w.code, c.reverse().map((x) => x.trade_price));
+        drawSpark(w.code);
+      }
+    } catch (_) {}
+    await sleep(120); // 업비트 호출 제한 배려
+  }
+}
+
+const RANGES = {
+  "1H": { label: "1시간", path: "minutes/1", count: 60 },
+  "1D": { label: "1일", path: "minutes/15", count: 96 },
+  "1W": { label: "1주", path: "minutes/240", count: 42 },
+  "3M": { label: "3개월", path: "days", count: 90 },
+  "1Y": { label: "1년", path: "weeks", count: 52 },
+};
+async function loadDetailChart() {
+  const code = state.detail, range = state.range;
+  const wrap = $("#chartWrap");
+  wrap.innerHTML = `<div class="skeleton" style="height:200px"></div>`;
+  try {
+    const r = RANGES[range];
+    const c = await (await fetch(`${UPBIT}/candles/${r.path}?market=${code}&count=${r.count}`)).json();
+    if (state.detail !== code || state.range !== range) return;
+    if (!Array.isArray(c) || c.length < 2) throw new Error();
+    const vals = c.reverse().map((x) => x.trade_price);
+    const hi = Math.max(...c.map((x) => x.high_price)), lo = Math.min(...c.map((x) => x.low_price));
+    const up = vals[vals.length - 1] >= vals[0];
+    const color = up ? "var(--up)" : "var(--down)";
+    const W = 320, H = 200, P = 18;
+    const line = linePath(vals, W, H, P);
+    wrap.innerHTML = `
+      <svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+        <defs><linearGradient id="g" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0" stop-color="${color}" stop-opacity=".22"/><stop offset="1" stop-color="${color}" stop-opacity="0"/>
+        </linearGradient></defs>
+        <path class="area" d="${line}L${W},${H}L0,${H}Z" fill="url(#g)"/>
+        <path class="line" d="${line}" style="stroke:${color}"/>
+      </svg>
+      <span class="chart-label num" style="top:0;right:2px">${fmtPrice(Math.max(...vals))}</span>
+      <span class="chart-label num" style="bottom:0;right:2px">${fmtPrice(Math.min(...vals))}</span>`;
+    $("#dHL").textContent = `${fmtPrice(hi)} / ${fmtPrice(lo)}`;
+  } catch (_) {
+    wrap.innerHTML = `<div class="empty">차트를 불러오지 못했어요</div>`;
+  }
+}
+
+/* ---------------- 관심목록 ---------------- */
+async function loadWatch() {
+  if (!sb || !state.session) { state.watch = []; state.watchLoaded = true; renderWatch(); return; }
+  const { data, error } = await sb.from("watchlist")
+    .select("asset_id, sort_order, created_at, assets(symbol, name, type)")
+    .order("sort_order").order("created_at");
+  if (error) toast("관심목록을 불러오지 못했어요: " + error.message);
+  state.watch = (data || [])
+    .filter((r) => r.assets && r.assets.type === "coin")
+    .map((r) => ({ asset_id: r.asset_id, code: r.assets.symbol, name: r.assets.name }));
+  state.watchLoaded = true;
+  renderWatch();
+  renderMarket();
+  loadSparks();
+}
+
+async function toggleWatch(code) {
+  if (!sb) return toast("먼저 Supabase 연결 정보를 넣어 주세요");
+  if (!state.session) return openSheet("auth");
+  const existing = state.watch.find((w) => w.code === code);
+  if (existing) {
+    const { error } = await sb.from("watchlist").delete().eq("asset_id", existing.asset_id);
+    if (error) return toast("삭제하지 못했어요: " + error.message);
+    state.watch = state.watch.filter((w) => w !== existing);
+    toast("관심목록에서 뺐어요");
+  } else {
+    const m = state.markets.get(code);
+    const { data: assetId, error } = await sb.rpc("ensure_coin_asset", { p_symbol: code, p_name: m ? m.ko : code });
+    if (error) return toast("추가하지 못했어요: " + error.message);
+    const { error: e2 } = await sb.from("watchlist").insert({ user_id: state.session.user.id, asset_id: assetId });
+    if (e2 && e2.code !== "23505") return toast("추가하지 못했어요: " + e2.message);
+    state.watch.push({ asset_id: assetId, code, name: m ? m.ko : code });
+    toast("관심목록에 담았어요");
+    loadSparks();
+  }
+  renderWatch();
+  renderMarket();
+  if (state.detail === code) renderDetailToggle();
+}
+
+function renderWatch() {
+  const body = $("#watchBody");
+  $("#watchTitle").textContent = state.watch.length ? `관심 코인 ${state.watch.length}개` : "관심 코인";
+  if (!sb || !state.session) {
+    const preview = state.order.slice(0, 5);
+    body.innerHTML = `
+      <div class="notice"><b>나만의 관심목록 만들기</b>로그인하면 관심 코인을 저장하고, 관련 뉴스도 모아 볼 수 있어요.
+        <div style="margin-top:12px"><button class="btn" data-action="login">로그인 / 회원가입</button></div></div>
+      ${preview.length ? `<h2>거래대금 상위</h2><div class="list">${preview.map(rowHTML).join("")}</div>` : ""}`;
+    return;
+  }
+  if (!state.watchLoaded) {
+    body.innerHTML = `<div class="cards"><div class="skeleton"></div><div class="skeleton"></div></div>`;
+    return;
+  }
+  if (!state.watch.length) {
+    body.innerHTML = `<div class="empty">아직 담은 코인이 없어요.<br><br><button class="btn" data-goto="market">코인 찾으러 가기</button></div>`;
+    return;
+  }
+  body.innerHTML = `<div class="cards">${state.watch.map((w) => `
+    <button class="card" data-open="${w.code}">
+      <div class="card-top">
+        <div><div class="name">${esc(w.name)}</div><div class="sym">${symOf(w.code)}</div></div>
+        <div class="right">${pxSpan(w.code)}${pctSpan(w.code, "badge pct num")}</div>
+      </div>
+      <svg class="spark" data-spark="${w.code}" viewBox="0 0 100 30" preserveAspectRatio="none"></svg>
+    </button>`).join("")}</div>`;
+  state.watch.forEach((w) => drawSpark(w.code));
+}
+
+/* ---------------- 코인 찾기 ---------------- */
+function rowHTML(code) {
+  const m = state.markets.get(code);
+  const on = state.watch.some((w) => w.code === code);
+  return `<div class="row">
+    <button class="r-name" data-open="${code}"><b>${esc(m.ko)}</b><span>${symOf(code)} · ${esc(m.en)}</span></button>
+    <button class="r-px" data-open="${code}">${pxSpan(code)}${pctSpan(code)}</button>
+    <button class="star ${on ? "on" : ""}" data-star="${code}" aria-label="${on ? "관심목록에서 빼기" : "관심목록에 담기"}">★</button>
+  </div>`;
+}
+function renderMarket() {
+  const body = $("#marketBody");
+  if (state.marketError) { body.innerHTML = `<div class="empty">시세를 불러오지 못했어요. 잠시 후 새로고침해 주세요.</div>`; return; }
+  if (!state.order.length) { body.innerHTML = `<div class="skeleton"></div>`; return; }
+  const q = $("#q").value.trim().toLowerCase();
+  const codes = q
+    ? state.order.filter((c) => {
+        const m = state.markets.get(c);
+        return m.ko.toLowerCase().includes(q) || m.en.toLowerCase().includes(q) || symOf(c).toLowerCase().includes(q);
+      })
+    : state.order;
+  body.innerHTML = codes.length
+    ? `<div class="list">${codes.map(rowHTML).join("")}</div>`
+    : `<div class="empty">"${esc(q)}"에 맞는 코인이 없어요</div>`;
+}
+
+/* ---------------- 뉴스 ---------------- */
+async function loadNews() {
+  const body = $("#newsBody");
+  if (!sb || !state.session) {
+    body.innerHTML = `<div class="notice"><b>로그인이 필요해요</b>관심목록에 담은 코인의 뉴스만 모아서 보여드려요.
+      <div style="margin-top:12px"><button class="btn" data-action="login">로그인</button></div></div>`;
+    return;
+  }
+  body.innerHTML = `<div class="skeleton"></div>`;
+  const { data, error } = await sb.rpc("my_news", { p_limit: 60 });
+  if (error) { body.innerHTML = `<div class="empty">뉴스를 불러오지 못했어요<br>${esc(error.message)}</div>`; return; }
+  if (!data.length) {
+    body.innerHTML = `<div class="empty">${state.watch.length
+      ? "아직 모인 뉴스가 없어요.<br>위의 ‘새로 가져오기’를 눌러 보세요."
+      : "관심목록에 코인을 담으면 관련 뉴스가 여기 모여요."}</div>`;
+    return;
+  }
+  body.innerHTML = data.map((n) => `
+    <a class="news-item" href="${esc(n.url)}" target="_blank" rel="noopener noreferrer">
+      <div class="t">${esc(n.title)}</div>
+      ${n.summary ? `<div class="s">${esc(n.summary)}</div>` : ""}
+      <div class="m">${(n.asset_names || []).map((a) => `<span class="chip">${esc(a)}</span>`).join("")}
+        <span>${esc(n.source || "")}</span><span>· ${ago(n.published_at)}</span></div>
+    </a>`).join("");
+}
+
+async function refreshNews() {
+  if (!sb || !state.session) return openSheet("auth");
+  if (!state.watch.length) return toast("먼저 관심목록에 코인을 담아 주세요");
+  const btn = $("#newsRefresh");
+  btn.disabled = true;
+  btn.textContent = "가져오는 중…";
+  const { data, error } = await sb.functions.invoke("news");
+  if (error) {
+    let msg = error.message;
+    try { const j = await error.context.json(); if (j.error) msg = j.error; } catch (_) {}
+    toast("뉴스를 가져오지 못했어요: " + msg);
+  } else {
+    toast(`뉴스 ${data.saved}건을 확인했어요`);
+  }
+  btn.disabled = false;
+  btn.textContent = "새로 가져오기";
+  loadNews();
+}
+
+/* ---------------- 상세 시트 ---------------- */
+function openDetail(code) {
+  const m = state.markets.get(code);
+  if (!m) return;
+  openSheet("detail"); // 다른 시트를 먼저 닫고 열기 (closeSheets 가 detail 을 비우므로 먼저 호출)
+  state.detail = code;
+  $("#dName").textContent = m.ko;
+  $("#dSym").textContent = `${symOf(code)} · ${m.en}`;
+  const px = $("#dPx"); px.dataset.px = code; px.dataset.v = ""; px.textContent = "";
+  const pct = $("#dPct"); pct.dataset.pct = code;
+  $("#dHL").textContent = "-";
+  $("#ranges").innerHTML = Object.entries(RANGES)
+    .map(([k, r]) => `<button data-range="${k}" class="${k === state.range ? "on" : ""}">${r.label}</button>`).join("");
+  renderDetailToggle();
+  updatePrices();
+  loadDetailChart();
+}
+function renderDetailToggle() {
+  const on = state.watch.some((w) => w.code === state.detail);
+  const b = $("#dToggle");
+  b.textContent = on ? "관심목록에서 빼기" : "★ 관심목록에 담기";
+  b.className = on ? "btn ghost full" : "btn full";
+}
+
+/* ---------------- 시트 / 탭 / 로그인 ---------------- */
+function openSheet(name) {
+  closeSheets();
+  $("#" + name + "Sheet").classList.add("open");
+  $("#backdrop").classList.add("open");
+  if (name === "auth") setAuthMode(state.authMode);
+}
+function closeSheets() {
+  document.querySelectorAll(".sheet.open").forEach((s) => s.classList.remove("open"));
+  $("#backdrop").classList.remove("open");
+  state.detail = null;
+  $("#dPx").removeAttribute("data-px");
+  $("#dPct").removeAttribute("data-pct");
+}
+function setTab(tab) {
+  state.tab = tab;
+  ["watch", "market", "news"].forEach((t) => $("#tab-" + t).classList.toggle("hidden", t !== tab));
+  document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
+  window.scrollTo(0, 0);
+  if (tab === "news") loadNews();
+}
+function setAuthMode(mode) {
+  state.authMode = mode;
+  const signup = mode === "signup";
+  $("#authTitle").textContent = signup ? "회원가입" : "로그인";
+  $("#authSubmit").textContent = signup ? "가입하기" : "로그인";
+  $("#authSwitch").textContent = signup ? "이미 계정이 있나요? 로그인" : "처음이신가요? 회원가입";
+  $("#password").autocomplete = signup ? "new-password" : "current-password";
+}
+function setSession(session) {
+  state.session = session;
+  $("#accountBtn").textContent = session ? "내 계정" : "로그인";
+  if (session) $("#accEmail").textContent = session.user.email || "";
+  state.watchLoaded = false;
+  state.spark.clear();
+  loadWatch();
+  if (state.tab === "news") loadNews();
+}
+
+$("#authForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (!sb) return toast("먼저 Supabase 연결 정보를 넣어 주세요");
+  const email = $("#email").value.trim(), password = $("#password").value;
+  const btn = $("#authSubmit");
+  btn.disabled = true;
+  if (state.authMode === "signup") {
+    const { data, error } = await sb.auth.signUp({ email, password, options: { emailRedirectTo: location.href.split("#")[0] } });
+    if (error) toast("가입하지 못했어요: " + error.message);
+    else if (!data.session) { toast("확인 메일을 보냈어요. 메일의 링크를 눌러 주세요"); setAuthMode("login"); }
+    else { toast("가입 완료!"); closeSheets(); }
+  } else {
+    const { error } = await sb.auth.signInWithPassword({ email, password });
+    if (error) toast(error.message.includes("Invalid") ? "이메일 또는 비밀번호가 맞지 않아요" : "로그인하지 못했어요: " + error.message);
+    else { toast("로그인했어요"); closeSheets(); }
+  }
+  btn.disabled = false;
+});
+$("#authSwitch").addEventListener("click", () => setAuthMode(state.authMode === "login" ? "signup" : "login"));
+$("#accountBtn").addEventListener("click", () => {
+  if (!sb) return toast("먼저 Supabase 연결 정보를 넣어 주세요");
+  openSheet(state.session ? "account" : "auth");
+});
+$("#logoutBtn").addEventListener("click", async () => { await sb.auth.signOut(); closeSheets(); toast("로그아웃했어요"); });
+$("#backdrop").addEventListener("click", closeSheets);
+$("#newsRefresh").addEventListener("click", refreshNews);
+$("#dToggle").addEventListener("click", () => state.detail && toggleWatch(state.detail));
+$("#q").addEventListener("input", renderMarket);
+
+// 화면 곳곳의 버튼 클릭을 한곳에서 처리
+document.addEventListener("click", (e) => {
+  const el = e.target.closest("[data-star],[data-open],[data-tab],[data-goto],[data-action],[data-range],[data-close]");
+  if (!el) return;
+  if (el.dataset.star) return toggleWatch(el.dataset.star);
+  if (el.dataset.open) return openDetail(el.dataset.open);
+  if (el.dataset.tab) return setTab(el.dataset.tab);
+  if (el.dataset.goto) return setTab(el.dataset.goto);
+  if (el.dataset.action === "login") return openSheet("auth");
+  if (el.hasAttribute("data-close")) return closeSheets();
+  if (el.dataset.range) {
+    state.range = el.dataset.range;
+    document.querySelectorAll("#ranges button").forEach((b) => b.classList.toggle("on", b === el));
+    loadDetailChart();
+  }
+});
+
+/* ---------------- 시작 ---------------- */
+(async function init() {
+  if (!configured) $("#setupNotice").classList.remove("hidden");
+  setLive(false, "연결 중");
+  renderWatch();
+  renderMarket();
+  loadMarkets();
+  if (sb) {
+    const { data } = await sb.auth.getSession();
+    setSession(data.session);
+    sb.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_IN" || event === "SIGNED_OUT") setSession(session);
+      else state.session = session;
+    });
+  } else {
+    state.watchLoaded = true;
+  }
+})();
+</script>
+</body>
+</html>
