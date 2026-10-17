@@ -126,7 +126,23 @@ nav button.on{color:var(--text)}
 .chart .area{stroke:none}
 .chart .line{fill:none;stroke-width:2;vector-effect:non-scaling-stroke;stroke-linejoin:round}
 .chart-wrap{position:relative;min-height:200px}
-.chart-label{position:absolute;font-size:11px;color:var(--muted);font-weight:600}
+.chart-label{position:absolute;font-size:11px;color:var(--muted);font-weight:600;pointer-events:none}
+.chart-wrap{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.chart{touch-action:pan-y}
+.chart .wick{fill:none;stroke-width:1;vector-effect:non-scaling-stroke}
+.chart .xh{stroke:var(--muted);stroke-width:1;stroke-dasharray:3 3;vector-effect:non-scaling-stroke}
+.chart .dot{stroke:var(--surface);stroke-width:2;vector-effect:non-scaling-stroke}
+.chart-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:2px 2px 6px;min-height:34px}
+.chart-when{font-size:12px;color:var(--muted);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.seg{display:inline-flex;gap:2px;background:var(--surface-2);padding:3px;border-radius:10px;flex:none}
+.seg button{display:inline-flex;align-items:center;gap:4px;height:28px;padding:0 10px;border-radius:8px;font-size:12px;font-weight:700;color:var(--muted)}
+.seg button svg{width:14px;height:14px}
+.seg button.on{background:var(--surface);color:var(--text);box-shadow:var(--shadow)}
+.ohlc{display:grid;grid-template-columns:repeat(4,1fr);background:var(--surface-2);border-radius:12px;padding:9px 4px;margin-top:10px}
+.ohlc div{text-align:center;min-width:0}
+.ohlc span{display:block;font-size:11px;color:var(--muted);margin-bottom:2px}
+.ohlc b{display:block;font-size:clamp(11px,3.3vw,13px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ohlc:empty{display:none}
 .stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0 16px}
 .stat{background:var(--surface-2);border-radius:12px;padding:10px 12px}
 .stat span{display:block;font-size:12px;color:var(--muted)}
@@ -220,7 +236,15 @@ nav button.on{color:var(--text)}
   <div class="big-px num"><span class="px" id="dPx"></span></div>
   <div><span class="badge pct num" id="dPct"></span> <span class="sym" style="font-size:12px;color:var(--muted)">전일 대비</span></div>
   <div class="ranges" id="ranges"></div>
+  <div class="chart-head">
+    <span class="chart-when num" id="chartWhen"></span>
+    <div class="seg" role="group" aria-label="차트 모양">
+      <button data-ctype="line"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-6 4 3 5-7 4 4"/></svg>선</button>
+      <button data-ctype="candle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3v4M7 15v6M17 5v5M17 16v3"/><rect x="5" y="7" width="4" height="8" rx="1"/><rect x="15" y="10" width="4" height="6" rx="1"/></svg>캔들</button>
+    </div>
+  </div>
   <div class="chart-wrap" id="chartWrap"></div>
+  <div class="ohlc num" id="ohlc"></div>
   <div class="stats">
     <div class="stat"><span>24시간 거래대금</span><b class="num" id="dVol">-</b></div>
     <div class="stat"><span>기간 고가 / 저가</span><b class="num" id="dHL">-</b></div>
@@ -287,6 +311,9 @@ const state = {
   authMode: "login",
   detail: null,
   range: "1D",
+  ctype: (() => { try { return localStorage.getItem("pot.ctype") === "candle" ? "candle" : "line"; } catch (_) { return "line"; } })(),
+  candles: null,        // 상세 차트에 쓰는 봉 데이터 (오래된 것부터)
+  chartMeta: null,      // 차트 좌표 계산용
   ws: null,
 };
 
@@ -501,41 +528,126 @@ async function loadSparks() {
 }
 
 const RANGES = {
-  "1H": { label: "1시간", path: "minutes/1", count: 60 },
-  "1D": { label: "1일", path: "minutes/15", count: 96 },
-  "1W": { label: "1주", path: "minutes/240", count: 42 },
-  "3M": { label: "3개월", path: "days", count: 90 },
-  "1Y": { label: "1년", path: "weeks", count: 52 },
+  "1H": { label: "1시간", path: "minutes/1", count: 60, unit: "1분봉" },
+  "1D": { label: "1일", path: "minutes/15", count: 96, unit: "15분봉" },
+  "1W": { label: "1주", path: "minutes/240", count: 42, unit: "4시간봉" },
+  "3M": { label: "3개월", path: "days", count: 90, unit: "일봉" },
+  "1Y": { label: "1년", path: "weeks", count: 52, unit: "주봉" },
 };
+function clearChartInfo() {
+  state.candles = null;
+  state.chartMeta = null;
+  $("#chartWhen").textContent = "";
+  $("#ohlc").innerHTML = "";
+}
 async function loadDetailChart() {
   const code = state.detail, range = state.range;
   const wrap = $("#chartWrap");
+  clearChartInfo();
   wrap.innerHTML = `<div class="skeleton" style="height:200px"></div>`;
   try {
     const r = RANGES[range];
     const c = await upbitGet("candles/" + r.path, { market: code, count: r.count });
     if (state.detail !== code || state.range !== range) return;
     if (!Array.isArray(c) || c.length < 2) throw new Error();
-    const vals = c.reverse().map((x) => x.trade_price);
+    state.candles = c.slice().reverse();
     const hi = Math.max(...c.map((x) => x.high_price)), lo = Math.min(...c.map((x) => x.low_price));
-    const up = vals[vals.length - 1] >= vals[0];
-    const color = up ? "var(--up)" : "var(--down)";
-    const W = 320, H = 200, P = 18;
-    const line = linePath(vals, W, H, P);
-    wrap.innerHTML = `
-      <svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
-        <defs><linearGradient id="g" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0" stop-color="${color}" stop-opacity=".22"/><stop offset="1" stop-color="${color}" stop-opacity="0"/>
-        </linearGradient></defs>
-        <path class="area" d="${line}L${W},${H}L0,${H}Z" fill="url(#g)"/>
-        <path class="line" d="${line}" style="stroke:${color}"/>
-      </svg>
-      <span class="chart-label num" style="top:0;right:2px">${fmtPrice(Math.max(...vals))}</span>
-      <span class="chart-label num" style="bottom:0;right:2px">${fmtPrice(Math.min(...vals))}</span>`;
     $("#dHL").textContent = `${fmtPrice(hi)} / ${fmtPrice(lo)}`;
+    drawDetailChart();
   } catch (_) {
     wrap.innerHTML = `<div class="empty">차트를 불러오지 못했어요</div>`;
   }
+}
+
+// 선 / 캔들 차트 그리기 (데이터는 같고 모양만 달라요)
+function drawDetailChart() {
+  const c = state.candles, wrap = $("#chartWrap");
+  if (!c) return;
+  const n = c.length, candle = state.ctype === "candle";
+  const W = Math.round(wrap.clientWidth) || 320, H = 200, P = 18;
+  const f = (v) => v.toFixed(2);
+  const closes = c.map((k) => k.trade_price);
+  const hi = candle ? Math.max(...c.map((k) => k.high_price)) : Math.max(...closes);
+  const lo = candle ? Math.min(...c.map((k) => k.low_price)) : Math.min(...closes);
+  const span = hi - lo || 1;
+  const y = (v) => P + (H - 2 * P) * (1 - (v - lo) / span);
+  const xOf = candle ? (i) => (W / n) * (i + 0.5) : (i) => (i / (n - 1)) * W;
+  let body;
+  if (candle) {
+    const bw = Math.max(1, Math.min((W / n) * 0.66, 14));
+    const g = { up: ["", ""], down: ["", ""], flat: ["", ""] };
+    c.forEach((k, i) => {
+      const o = k.opening_price, cl = k.trade_price;
+      const p = g[cl > o ? "up" : cl < o ? "down" : "flat"];
+      const x = xOf(i), top = y(Math.max(o, cl)), h = Math.max(1, y(Math.min(o, cl)) - top);
+      p[0] += `M${f(x)},${f(y(k.high_price))}V${f(y(k.low_price))}`;
+      p[1] += `M${f(x - bw / 2)},${f(top)}h${f(bw)}v${f(h)}h${f(-bw)}Z`;
+    });
+    body = Object.entries(g).map(([d, [wick, rect]]) => {
+      const col = `var(--${d === "flat" ? "muted" : d})`;
+      return (wick ? `<path class="wick" d="${wick}" style="stroke:${col}"/>` : "")
+        + (rect ? `<path d="${rect}" style="fill:${col}"/>` : "");
+    }).join("");
+  } else {
+    const color = closes[n - 1] >= closes[0] ? "var(--up)" : "var(--down)";
+    const line = closes.map((v, i) => `${i ? "L" : "M"}${f(xOf(i))},${f(y(v))}`).join("");
+    body = `<defs><linearGradient id="g" x1="0" x2="0" y1="0" y2="1">
+        <stop offset="0" stop-color="${color}" stop-opacity=".22"/><stop offset="1" stop-color="${color}" stop-opacity="0"/>
+      </linearGradient></defs>
+      <path class="area" d="${line}L${W},${H}L0,${H}Z" fill="url(#g)"/>
+      <path class="line" d="${line}" style="stroke:${color}"/>`;
+  }
+  wrap.innerHTML = `
+    <svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${body}<g class="sel"></g></svg>
+    <span class="chart-label num" style="top:0;right:2px">${fmtPrice(hi)}</span>
+    <span class="chart-label num" style="bottom:0;right:2px">${fmtPrice(lo)}</span>`;
+  state.chartMeta = { n, W, H, candle, xOf, y };
+  selectCandle(null);
+}
+
+function candleTime(k) {
+  const [d, t = ""] = String(k.candle_date_time_kst || "").split("T");
+  const [Y, M, D] = d.split("-").map(Number);
+  if (!D) return "";
+  const path = RANGES[state.range].path;
+  if (path === "days" || path === "weeks") return `${Y}.${M}.${D}`;
+  return `${M}.${D} ${t.slice(0, 5)}`;
+}
+
+// 누른 봉의 시가·고가·저가·종가 보여주기 (null 이면 가장 최근 봉)
+function selectCandle(i) {
+  const c = state.candles, m = state.chartMeta;
+  if (!c || !m) return;
+  const k = c[i ?? c.length - 1];
+  const g = $("#chartWrap .sel");
+  if (g) {
+    if (i == null) g.innerHTML = "";
+    else {
+      const x = m.xOf(i).toFixed(2);
+      const dotColor = c[c.length - 1].trade_price >= c[0].trade_price ? "var(--up)" : "var(--down)";
+      g.innerHTML = `<line class="xh" x1="${x}" x2="${x}" y1="0" y2="${m.H}"/>`
+        + (m.candle ? "" : `<circle class="dot" cx="${x}" cy="${m.y(k.trade_price).toFixed(2)}" r="4" style="fill:${dotColor}"/>`);
+    }
+  }
+  $("#chartWhen").textContent = `${RANGES[state.range].unit} · ${candleTime(k)}`;
+  const d = dir(k.trade_price - k.opening_price);
+  $("#ohlc").innerHTML = [["시가", k.opening_price, ""], ["고가", k.high_price, "up"], ["저가", k.low_price, "down"], ["종가", k.trade_price, d]]
+    .map(([label, v, cls]) => `<div><span>${label}</span><b class="${cls}">${fmtPrice(v)}</b></div>`).join("");
+}
+
+function pickCandle(e) {
+  const svg = $("#chartWrap svg.chart"), m = state.chartMeta;
+  if (!svg || !m) return;
+  const r = svg.getBoundingClientRect();
+  const fx = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+  selectCandle(m.candle ? Math.min(m.n - 1, Math.floor(fx * m.n)) : Math.round(fx * (m.n - 1)));
+}
+
+function setChartType(type) {
+  state.ctype = type;
+  try { localStorage.setItem("pot.ctype", type); } catch (_) {}
+  document.querySelectorAll("[data-ctype]").forEach((b) => b.classList.toggle("on", b.dataset.ctype === type));
+  drawDetailChart();
 }
 
 /* ---------------- 관심목록 ---------------- */
@@ -699,6 +811,7 @@ function openDetail(code) {
   $("#dHL").textContent = "-";
   $("#ranges").innerHTML = Object.entries(RANGES)
     .map(([k, r]) => `<button data-range="${k}" class="${k === state.range ? "on" : ""}">${r.label}</button>`).join("");
+  document.querySelectorAll("[data-ctype]").forEach((b) => b.classList.toggle("on", b.dataset.ctype === state.ctype));
   renderDetailToggle();
   updatePrices();
   loadDetailChart();
@@ -778,10 +891,26 @@ $("#newsRefresh").addEventListener("click", refreshNews);
 $("#dToggle").addEventListener("click", () => state.detail && toggleWatch(state.detail));
 $("#q").addEventListener("input", renderMarket);
 
+// 차트를 누르거나 손가락으로 옆으로 밀면 그 봉의 가격을 보여줘요
+const chartWrapEl = $("#chartWrap");
+chartWrapEl.addEventListener("pointerdown", pickCandle);
+chartWrapEl.addEventListener("pointermove", (e) => { if (e.pointerType === "mouse" || e.buttons) pickCandle(e); });
+chartWrapEl.addEventListener("pointerleave", (e) => { if (e.pointerType === "mouse") selectCandle(null); });
+let resizeFrame = 0;
+window.addEventListener("resize", () => {
+  if (resizeFrame) return;
+  resizeFrame = requestAnimationFrame(() => {
+    resizeFrame = 0;
+    // 주소창이 접힐 때처럼 높이만 바뀌면 다시 그리지 않아요
+    if (state.detail && state.chartMeta && Math.round(chartWrapEl.clientWidth) !== state.chartMeta.W) drawDetailChart();
+  });
+});
+
 // 화면 곳곳의 버튼 클릭을 한곳에서 처리
 document.addEventListener("click", (e) => {
-  const el = e.target.closest("[data-star],[data-open],[data-tab],[data-goto],[data-action],[data-range],[data-close]");
+  const el = e.target.closest("[data-star],[data-open],[data-tab],[data-goto],[data-action],[data-range],[data-ctype],[data-close]");
   if (!el) return;
+  if (el.dataset.ctype) return setChartType(el.dataset.ctype);
   if (el.dataset.star) return toggleWatch(el.dataset.star);
   if (el.dataset.open) return openDetail(el.dataset.open);
   if (el.dataset.tab) return setTab(el.dataset.tab);
