@@ -170,6 +170,14 @@ nav button.on{color:var(--text)}
 .px.fd{animation:flashDown .6s}
 .px{border-radius:4px}
 .hidden{display:none !important}
+
+/* 미국 주식 */
+.kinds{margin:0 0 8px}
+.mk{display:inline-block;font-size:11px;font-weight:700;padding:2px 7px;border-radius:6px;background:var(--surface-2);color:var(--muted);vertical-align:2px;margin-left:4px}
+.mk.regular{background:color-mix(in srgb,var(--live) 16%,transparent);color:var(--live)}
+.market-note{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin:2px 2px 10px}
+.sub-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.sub-h small{font-size:12px;font-weight:600;color:var(--muted)}
 </style>
 </head>
 <body>
@@ -189,26 +197,32 @@ nav button.on{color:var(--text)}
 
   <!-- 관심목록 -->
   <section id="tab-watch">
-    <h2 id="watchTitle">관심 코인</h2>
+    <h2 id="watchTitle">관심목록</h2>
     <div id="watchBody"></div>
   </section>
 
-  <!-- 코인 찾기 -->
+  <!-- 찾기 (코인 / 미국 주식) -->
   <section id="tab-market" class="hidden">
-    <div class="search"><input id="q" type="search" placeholder="코인 이름이나 기호 검색 (예: 비트, BTC)" autocomplete="off"></div>
+    <div class="search">
+      <div class="ranges kinds" id="kinds">
+        <button data-kind="coin" class="on">코인</button>
+        <button data-kind="stock">미국 주식</button>
+      </div>
+      <input id="q" type="search" placeholder="코인 이름이나 기호 검색 (예: 비트, BTC)" autocomplete="off">
+    </div>
     <div id="marketBody"></div>
   </section>
 
   <!-- 뉴스 -->
   <section id="tab-news" class="hidden">
     <div class="news-bar">
-      <h2>관심 코인 뉴스</h2>
+      <h2>관심목록 뉴스</h2>
       <button class="pill" id="newsRefresh">새로 가져오기</button>
     </div>
     <div id="newsBody"></div>
   </section>
 
-  <p class="disclaimer">시세: 업비트 · 뉴스: 블록미디어, 토큰포스트, 한국경제 RSS (기사 저작권은 각 언론사에 있어요)<br>이 사이트는 정보 제공용이며 투자 권유가 아니에요.</p>
+  <p class="disclaimer">코인 시세: 업비트 · 미국 주식 시세: Alpaca (현재가는 IEX 거래소 실시간, 차트와 거래대금은 전체 시장 기준 15분 지연)<br>뉴스: 블록미디어, 토큰포스트, 한국경제 RSS (기사 저작권은 각 언론사에 있어요)<br>이 사이트는 정보 제공용이며 투자 권유가 아니에요.</p>
 </main>
 
 <nav>
@@ -217,7 +231,7 @@ nav button.on{color:var(--text)}
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/></svg>관심목록
     </button>
     <button data-tab="market">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>코인 찾기
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>찾기
     </button>
     <button data-tab="news">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9h10M7 13h10M7 17h6"/></svg>뉴스
@@ -225,7 +239,7 @@ nav button.on{color:var(--text)}
   </div>
 </nav>
 
-<!-- 코인 상세 시트 -->
+<!-- 상세 시트 (코인 / 미국 주식) -->
 <div class="backdrop" id="backdrop"></div>
 <div class="sheet" id="detailSheet" role="dialog" aria-modal="true">
   <div class="grab"></div>
@@ -234,7 +248,7 @@ nav button.on{color:var(--text)}
     <button class="close" data-close aria-label="닫기">✕</button>
   </div>
   <div class="big-px num"><span class="px" id="dPx"></span></div>
-  <div><span class="badge pct num" id="dPct"></span> <span class="sym" style="font-size:12px;color:var(--muted)">전일 대비</span></div>
+  <div><span class="badge pct num" id="dPct"></span> <span class="sym" style="font-size:12px;color:var(--muted)">전일 대비</span><span class="mk hidden" id="dSession"></span></div>
   <div class="ranges" id="ranges"></div>
   <div class="chart-head">
     <span class="chart-when num" id="chartWhen"></span>
@@ -246,7 +260,7 @@ nav button.on{color:var(--text)}
   <div class="chart-wrap" id="chartWrap"></div>
   <div class="ohlc num" id="ohlc"></div>
   <div class="stats">
-    <div class="stat"><span>24시간 거래대금</span><b class="num" id="dVol">-</b></div>
+    <div class="stat"><span id="dVolLabel">24시간 거래대금</span><b class="num" id="dVol">-</b></div>
     <div class="stat"><span>기간 고가 / 저가</span><b class="num" id="dHL">-</b></div>
   </div>
   <button class="btn full" id="dToggle"></button>
@@ -315,12 +329,95 @@ const state = {
   candles: null,        // 상세 차트에 쓰는 봉 데이터 (오래된 것부터)
   chartMeta: null,      // 차트 좌표 계산용
   ws: null,
+  // 미국 주식 (코드는 "US:AAPL" 처럼 써요)
+  kind: "coin",         // 찾기 탭에서 보고 있는 종류: coin | stock
+  stocks: new Map(),    // "US:AAPL" -> { code, sym, ko, en, exch, alias }
+  stockOrder: [],       // 인기 종목 순서
+  stockSession: null,   // regular | pre | after | closed
+  stockNextOpen: null,
+  stockFull: true,      // 전체 시장(15분 지연) 데이터를 받을 수 있는지
+  stockError: false,
+  stockAt: new Map(),   // code -> 마지막으로 현재가를 받은 시각
+  stockSearch: { q: "", codes: [], loading: false },
 };
 
 const $ = (s) => document.querySelector(s);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const symOf = (code) => code.replace("KRW-", "");
+const isStock = (code) => String(code).startsWith("US:");
+const symOf = (code) => code.replace(/^(KRW-|US:)/, "");
+
+/* 인기 미국 주식·ETF (한글 이름으로도 찾을 수 있게)
+   [티커, 한글 이름, 영문 이름, 다른 이름(검색용)] */
+const US_POPULAR = [
+  ["TSLA", "테슬라", "Tesla"], ["NVDA", "엔비디아", "NVIDIA"], ["AAPL", "애플", "Apple", "아이폰"],
+  ["MSFT", "마이크로소프트", "Microsoft", "마소"], ["AMZN", "아마존", "Amazon", "아마존닷컴"],
+  ["GOOGL", "알파벳 A", "Alphabet Class A", "구글"], ["GOOG", "알파벳 C", "Alphabet Class C", "구글"],
+  ["META", "메타", "Meta Platforms", "페이스북"], ["AVGO", "브로드컴", "Broadcom"],
+  ["PLTR", "팔란티어", "Palantir"], ["TSM", "TSMC", "Taiwan Semiconductor", "대만 반도체"],
+  ["AMD", "AMD", "Advanced Micro Devices"], ["NFLX", "넷플릭스", "Netflix"],
+  ["QQQ", "인베스코 QQQ", "Invesco QQQ Trust", "나스닥100"], ["SPY", "SPDR S&P 500", "SPDR S&P 500 ETF", "에스앤피"],
+  ["VOO", "뱅가드 S&P 500", "Vanguard S&P 500 ETF", "에스앤피"], ["SCHD", "슈왑 미국 배당", "Schwab US Dividend Equity ETF", "배당"],
+  ["TQQQ", "프로셰어즈 QQQ 3배", "ProShares UltraPro QQQ", "레버리지 나스닥"],
+  ["SOXL", "디렉시온 반도체 3배", "Direxion Daily Semiconductor Bull 3X", "레버리지 반도체"],
+  ["SQQQ", "프로셰어즈 QQQ 인버스 3배", "ProShares UltraPro Short QQQ", "인버스"],
+  ["JEPI", "JP모건 프리미엄 인컴", "JPMorgan Equity Premium Income ETF", "배당"],
+  ["JEPQ", "JP모건 나스닥 프리미엄 인컴", "JPMorgan Nasdaq Equity Premium Income ETF", "배당"],
+  ["TLT", "아이셰어즈 미국채 20년+", "iShares 20+ Year Treasury Bond ETF", "채권"],
+  ["DIA", "SPDR 다우존스", "SPDR Dow Jones Industrial Average ETF", "다우"],
+  ["IWM", "아이셰어즈 러셀 2000", "iShares Russell 2000 ETF", "러셀"],
+  ["VTI", "뱅가드 토탈 마켓", "Vanguard Total Stock Market ETF"], ["SOXX", "아이셰어즈 반도체", "iShares Semiconductor ETF"],
+  ["GLD", "SPDR 금", "SPDR Gold Shares", "골드"],
+  ["MU", "마이크론", "Micron Technology"], ["INTC", "인텔", "Intel"], ["QCOM", "퀄컴", "Qualcomm"],
+  ["ARM", "ARM 홀딩스", "Arm Holdings", "암"], ["ASML", "ASML", "ASML Holding"],
+  ["AMAT", "어플라이드 머티어리얼즈", "Applied Materials"], ["LRCX", "램리서치", "Lam Research"],
+  ["TXN", "텍사스 인스트루먼트", "Texas Instruments"], ["MRVL", "마벨 테크놀로지", "Marvell Technology"],
+  ["SMCI", "슈퍼마이크로", "Super Micro Computer"], ["DELL", "델", "Dell Technologies"],
+  ["ORCL", "오라클", "Oracle"], ["CRM", "세일즈포스", "Salesforce"], ["ADBE", "어도비", "Adobe"],
+  ["NOW", "서비스나우", "ServiceNow"], ["SNOW", "스노우플레이크", "Snowflake"],
+  ["CRWD", "크라우드스트라이크", "CrowdStrike"], ["PANW", "팔로알토 네트웍스", "Palo Alto Networks"],
+  ["IBM", "IBM", "IBM"], ["CSCO", "시스코", "Cisco Systems"],
+  ["COIN", "코인베이스", "Coinbase"], ["MSTR", "스트래티지", "Strategy", "마이크로스트래티지"],
+  ["HOOD", "로빈후드", "Robinhood Markets"], ["SOFI", "소파이", "SoFi Technologies"],
+  ["IONQ", "아이온큐", "IonQ", "양자"], ["RKLB", "로켓랩", "Rocket Lab"],
+  ["UBER", "우버", "Uber Technologies"], ["ABNB", "에어비앤비", "Airbnb"], ["SHOP", "쇼피파이", "Shopify"],
+  ["PYPL", "페이팔", "PayPal"], ["DIS", "디즈니", "Walt Disney"],
+  ["RIVN", "리비안", "Rivian Automotive"], ["LCID", "루시드", "Lucid Group"], ["NIO", "니오", "NIO"],
+  ["CPNG", "쿠팡", "Coupang"], ["BABA", "알리바바", "Alibaba Group"], ["PDD", "PDD 홀딩스", "PDD Holdings", "테무"],
+  ["BRK.B", "버크셔 해서웨이 B", "Berkshire Hathaway Class B", "버크셔"],
+  ["JPM", "JP모건", "JPMorgan Chase"], ["BAC", "뱅크오브아메리카", "Bank of America"],
+  ["GS", "골드만삭스", "Goldman Sachs"], ["MS", "모건스탠리", "Morgan Stanley"],
+  ["V", "비자", "Visa"], ["MA", "마스터카드", "Mastercard"],
+  ["WMT", "월마트", "Walmart"], ["COST", "코스트코", "Costco"], ["KO", "코카콜라", "Coca-Cola"],
+  ["PEP", "펩시코", "PepsiCo", "펩시"], ["MCD", "맥도날드", "McDonald's"], ["SBUX", "스타벅스", "Starbucks"],
+  ["NKE", "나이키", "Nike"], ["LLY", "일라이 릴리", "Eli Lilly"], ["UNH", "유나이티드헬스", "UnitedHealth Group"],
+  ["JNJ", "존슨앤드존슨", "Johnson & Johnson"], ["PFE", "화이자", "Pfizer"], ["MRK", "머크", "Merck"],
+  ["ABBV", "애브비", "AbbVie"], ["NVO", "노보 노디스크", "Novo Nordisk"],
+  ["XOM", "엑슨모빌", "Exxon Mobil"], ["CVX", "셰브론", "Chevron"], ["BA", "보잉", "Boeing"],
+  ["CAT", "캐터필러", "Caterpillar"], ["GE", "GE 에어로스페이스", "GE Aerospace"],
+  ["T", "AT&T", "AT&T"], ["VZ", "버라이즌", "Verizon"], ["O", "리얼티 인컴", "Realty Income", "월배당"],
+];
+US_POPULAR.forEach(([sym, ko, en, alias = ""]) => {
+  const code = "US:" + sym;
+  state.stocks.set(code, { code, sym, ko, en, exch: "", alias });
+  state.stockOrder.push(code);
+});
+const EXCH = { NASDAQ: "나스닥", NYSE: "뉴욕", ARCA: "NYSE Arca", AMEX: "NYSE American", BATS: "Cboe" };
+
+// 화면에 보여줄 이름과 보조 설명
+function nameOf(code) {
+  if (isStock(code)) { const s = state.stocks.get(code); return s ? s.ko || s.en : symOf(code); }
+  const m = state.markets.get(code);
+  return m ? m.ko : symOf(code);
+}
+function subOf(code) {
+  if (isStock(code)) {
+    const s = state.stocks.get(code);
+    return [symOf(code), s && s.ko ? s.en : "", s && EXCH[s.exch] ? EXCH[s.exch] : ""].filter(Boolean).join(" · ");
+  }
+  const m = state.markets.get(code);
+  return `${symOf(code)}${m ? " · " + m.en : ""}`;
+}
 
 function fmtPrice(p) {
   if (p == null || isNaN(p)) return "-";
@@ -341,6 +438,19 @@ function fmtKRW(v) {
   if (v >= 1e4) return Math.round(v / 1e4).toLocaleString("ko-KR") + "만원";
   return Math.round(v).toLocaleString("ko-KR") + "원";
 }
+function fmtUSD(p) {
+  if (p == null || isNaN(p)) return "-";
+  if (p >= 1) return "$" + p.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return "$" + p.toLocaleString("en-US", { maximumSignificantDigits: 4 });
+}
+const fmtPx = (code, p) => (isStock(code) ? fmtUSD(p) : fmtPrice(p));
+function fmtUSDVol(v) {
+  if (!v) return "-";
+  if (v >= 1e8) return (v / 1e8).toLocaleString("ko-KR", { maximumFractionDigits: v >= 1e10 ? 0 : 1 }) + "억 달러";
+  if (v >= 1e4) return Math.round(v / 1e4).toLocaleString("ko-KR") + "만 달러";
+  return "$" + Math.round(v).toLocaleString("en-US");
+}
+const fmtVol = (code, v) => (isStock(code) ? fmtUSDVol(v) : fmtKRW(v));
 function ago(iso) {
   const m = (Date.now() - new Date(iso).getTime()) / 60000;
   if (m < 1) return "방금";
@@ -456,6 +566,105 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible" && !state.ws) connectWS();
 });
 
+/* ---------------- 시세 (미국 주식, Supabase 의 stocks 함수 → Alpaca) ---------------- */
+async function stockApi(params) {
+  if (!configured) throw new Error("Supabase 연결 정보가 필요해요");
+  const r = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/stocks?${new URLSearchParams(params)}`,
+    { headers: { apikey: CONFIG.SUPABASE_KEY } });
+  let j = null;
+  try { j = await r.json(); } catch (_) {}
+  if (!r.ok) {
+    if (j && j.error) throw new Error(j.error);
+    if (r.status === 404) throw new Error("Supabase 에 stocks 함수가 아직 없어요");
+    if (r.status === 401) throw new Error("stocks 함수의 Verify JWT 를 꺼 주세요");
+    throw new Error(`stocks 함수 응답 ${r.status}${j && j.message ? ": " + j.message : ""}`);
+  }
+  return j;
+}
+
+// 현재가: 최근 10초 안에 받은 종목은 건너뛰어요 (force 면 모두)
+async function loadStockQuotes(codes, force = false) {
+  if (!configured) return;
+  const now = Date.now();
+  const need = [...new Set(codes)].filter((c) => isStock(c) && (force || now - (state.stockAt.get(c) || 0) > 10000));
+  if (!need.length) return;
+  need.forEach((c) => state.stockAt.set(c, now)); // 같은 종목을 동시에 두 번 요청하지 않게
+  try {
+    for (let i = 0; i < need.length; i += 100) {
+      const part = need.slice(i, i + 100);
+      const j = await stockApi({ action: "quotes", symbols: part.map(symOf).join(",") });
+      for (const c of part) {
+        const q = j.quotes[symOf(c)];
+        state.stockAt.set(c, Date.now());
+        if (q) state.tickers.set(c, { price: q.price, rate: q.rate, vol: q.vol, prevClose: q.prevClose });
+      }
+      state.stockSession = j.session;
+      state.stockNextOpen = j.nextOpen;
+      state.stockFull = j.full !== false;
+    }
+    if (state.stockError) { state.stockError = false; renderMarket(); renderWatch(); }
+    renderSessionInfo();
+    schedulePriceUpdate();
+  } catch (e) {
+    need.forEach((c) => state.stockAt.delete(c));
+    const first = !state.stockError;
+    state.stockError = e.message || "알 수 없는 오류";
+    if (first) { renderMarket(); renderWatch(); }
+  }
+}
+
+// 지금 화면에 보이는 미국 주식들
+function visibleStockCodes() {
+  const s = new Set();
+  state.watch.forEach((w) => isStock(w.code) && s.add(w.code));
+  if (state.tab === "watch" && !state.session) state.stockOrder.slice(0, 5).forEach((c) => s.add(c));
+  if (state.tab === "market" && state.kind === "stock") stockListCodes().slice(0, 100).forEach((c) => s.add(c));
+  if (state.detail && isStock(state.detail)) s.add(state.detail);
+  return [...s];
+}
+
+// 장이 열려 있으면 15초, 닫혀 있으면 1분마다 새로 받아요 (화면을 보고 있을 때만)
+let stockPollAt = 0;
+setInterval(() => {
+  if (document.visibilityState !== "visible" || !configured) return;
+  const quiet = state.stockSession === "closed";
+  if (quiet && Date.now() - stockPollAt < 60000) return;
+  const codes = visibleStockCodes();
+  if (!codes.length) return;
+  stockPollAt = Date.now();
+  loadStockQuotes(codes, true);
+}, 15000);
+
+const SESSION_TEXT = { regular: "정규장", pre: "프리마켓", after: "애프터마켓", closed: "장 마감" };
+function nextOpenText() {
+  if (!state.stockNextOpen) return "";
+  const d = new Date(state.stockNextOpen);
+  if (isNaN(d)) return "";
+  const p = Object.fromEntries(new Intl.DateTimeFormat("ko-KR", {
+    timeZone: "Asia/Seoul", month: "numeric", day: "numeric", weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).formatToParts(d).map((x) => [x.type, x.value]));
+  return `${p.month}.${p.day} (${p.weekday}) ${p.hour}:${p.minute}`;
+}
+// 장 상태 표시 (찾기 탭 위쪽, 상세 시트)
+function renderSessionInfo() {
+  const s = state.stockSession;
+  const note = $("#marketNote");
+  if (note) {
+    const next = s !== "regular" ? nextOpenText() : "";
+    note.innerHTML = s ? `<span class="mk ${s}" style="margin:0">${SESSION_TEXT[s]}</span>`
+      + (next ? `<span>다음 정규장 ${next} (한국 시간)</span>` : "")
+      + (s === "regular" ? `<span>15초마다 새로 받아요</span>` : "") : "";
+  }
+  document.querySelectorAll("[data-session]").forEach((el) => {
+    el.className = s ? "mk " + s : "mk hidden";
+    el.textContent = s ? SESSION_TEXT[s] : "";
+  });
+  const chip = $("#dSession");
+  const show = !!(s && state.detail && isStock(state.detail));
+  chip.className = show ? "mk " + s : "mk hidden";
+  chip.textContent = show ? SESSION_TEXT[s] : "";
+}
+
 let priceFrame = 0;
 function schedulePriceUpdate() {
   if (priceFrame) return;
@@ -466,7 +675,7 @@ function updatePrices() {
   document.querySelectorAll("[data-px]").forEach((el) => {
     const t = state.tickers.get(el.dataset.px);
     if (!t) return;
-    const txt = fmtPrice(t.price);
+    const txt = fmtPx(el.dataset.px, t.price);
     if (el.textContent !== txt) {
       const prev = parseFloat(el.dataset.v || "0");
       el.textContent = txt;
@@ -487,13 +696,13 @@ function updatePrices() {
   });
   if (state.detail) {
     const t = state.tickers.get(state.detail);
-    if (t) $("#dVol").textContent = fmtKRW(t.vol);
+    if (t) $("#dVol").textContent = fmtVol(state.detail, t.vol);
   }
 }
 
 function pxSpan(code, cls = "px num") {
   const t = state.tickers.get(code);
-  return `<span class="${cls}" data-px="${code}" data-v="${t?.price || ""}">${fmtPrice(t?.price)}</span>`;
+  return `<span class="${cls}" data-px="${code}" data-v="${t?.price || ""}">${fmtPx(code, t?.price)}</span>`;
 }
 function pctSpan(code, cls = "pct num") {
   const t = state.tickers.get(code);
@@ -513,8 +722,23 @@ function drawSpark(code) {
   const color = vals[vals.length - 1] >= vals[0] ? "var(--up)" : "var(--down)";
   svg.innerHTML = `<path d="${linePath(vals, 100, 30, 2)}" style="stroke:${color}"/>`;
 }
+async function loadStockSparks(codes) {
+  for (let i = 0; i < codes.length; i += 50) {
+    const part = codes.slice(i, i + 50);
+    try {
+      const j = await stockApi({ action: "sparks", symbols: part.map(symOf).join(",") });
+      for (const c of part) {
+        const vals = j.sparks[symOf(c)];
+        if (vals && vals.length > 1) { state.spark.set(c, vals); drawSpark(c); }
+      }
+    } catch (_) {}
+  }
+}
 async function loadSparks() {
+  const stockCodes = state.watch.filter((w) => isStock(w.code) && !state.spark.has(w.code)).map((w) => w.code);
+  if (stockCodes.length) loadStockSparks(stockCodes);
   for (const w of state.watch) {
+    if (isStock(w.code)) { drawSpark(w.code); continue; }
     if (state.spark.has(w.code)) { drawSpark(w.code); continue; }
     try {
       const c = await upbitGet("candles/minutes/60", { market: w.code, count: 24 });
@@ -534,6 +758,14 @@ const RANGES = {
   "3M": { label: "3개월", path: "days", count: 90, unit: "일봉" },
   "1Y": { label: "1년", path: "weeks", count: 52, unit: "주봉" },
 };
+// 미국 주식은 같은 기간 버튼을 쓰되 봉 크기가 달라요 (stocks 함수의 RANGES 와 맞춰요)
+const STOCK_UNITS = { "1H": "1분봉", "1D": "5분봉", "1W": "1시간봉", "3M": "일봉", "1Y": "주봉" };
+const unitOf = (code, range) => (isStock(code) ? STOCK_UNITS[range] : RANGES[range].unit);
+// Alpaca 봉을 업비트 봉 모양으로 바꿔요 (시각은 한국 시간)
+const toCandle = (b) => ({
+  candle_date_time_kst: new Date(Date.parse(b.t) + 9 * 3600e3).toISOString().slice(0, 19),
+  opening_price: b.o, high_price: b.h, low_price: b.l, trade_price: b.c,
+});
 function clearChartInfo() {
   state.candles = null;
   state.chartMeta = null;
@@ -546,16 +778,25 @@ async function loadDetailChart() {
   clearChartInfo();
   wrap.innerHTML = `<div class="skeleton" style="height:200px"></div>`;
   try {
-    const r = RANGES[range];
-    const c = await upbitGet("candles/" + r.path, { market: code, count: r.count });
+    let c;
+    if (isStock(code)) {
+      const j = await stockApi({ action: "bars", symbol: symOf(code), range });
+      c = j.bars.map(toCandle);                 // 오래된 것부터
+    } else {
+      const r = RANGES[range];
+      c = await upbitGet("candles/" + r.path, { market: code, count: r.count });
+      if (Array.isArray(c)) c = c.slice().reverse(); // 업비트는 최근 것부터 와요
+    }
     if (state.detail !== code || state.range !== range) return;
-    if (!Array.isArray(c) || c.length < 2) throw new Error();
-    state.candles = c.slice().reverse();
+    if (!Array.isArray(c) || c.length < 2) throw new Error("이 기간에는 거래 기록이 거의 없어요");
+    state.candles = c;
     const hi = Math.max(...c.map((x) => x.high_price)), lo = Math.min(...c.map((x) => x.low_price));
-    $("#dHL").textContent = `${fmtPrice(hi)} / ${fmtPrice(lo)}`;
+    $("#dHL").textContent = `${fmtPx(code, hi)} / ${fmtPx(code, lo)}`;
     drawDetailChart();
-  } catch (_) {
-    wrap.innerHTML = `<div class="empty">차트를 불러오지 못했어요</div>`;
+  } catch (e) {
+    if (state.detail !== code || state.range !== range) return;
+    const why = isStock(code) && e && e.message ? `<br><small>${esc(e.message)}</small>` : "";
+    wrap.innerHTML = `<div class="empty">차트를 불러오지 못했어요${why}</div>`;
   }
 }
 
@@ -599,8 +840,8 @@ function drawDetailChart() {
   }
   wrap.innerHTML = `
     <svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${body}<g class="sel"></g></svg>
-    <span class="chart-label num" style="top:0;right:2px">${fmtPrice(hi)}</span>
-    <span class="chart-label num" style="bottom:0;right:2px">${fmtPrice(lo)}</span>`;
+    <span class="chart-label num" style="top:0;right:2px">${fmtPx(state.detail, hi)}</span>
+    <span class="chart-label num" style="bottom:0;right:2px">${fmtPx(state.detail, lo)}</span>`;
   state.chartMeta = { n, W, H, candle, xOf, y };
   selectCandle(null);
 }
@@ -609,8 +850,7 @@ function candleTime(k) {
   const [d, t = ""] = String(k.candle_date_time_kst || "").split("T");
   const [Y, M, D] = d.split("-").map(Number);
   if (!D) return "";
-  const path = RANGES[state.range].path;
-  if (path === "days" || path === "weeks") return `${Y}.${M}.${D}`;
+  if (state.range === "3M" || state.range === "1Y") return `${Y}.${M}.${D}`; // 일봉·주봉
   return `${M}.${D} ${t.slice(0, 5)}`;
 }
 
@@ -629,10 +869,10 @@ function selectCandle(i) {
         + (m.candle ? "" : `<circle class="dot" cx="${x}" cy="${m.y(k.trade_price).toFixed(2)}" r="4" style="fill:${dotColor}"/>`);
     }
   }
-  $("#chartWhen").textContent = `${RANGES[state.range].unit} · ${candleTime(k)}`;
+  $("#chartWhen").textContent = `${unitOf(state.detail, state.range)} · ${candleTime(k)}`;
   const d = dir(k.trade_price - k.opening_price);
   $("#ohlc").innerHTML = [["시가", k.opening_price, ""], ["고가", k.high_price, "up"], ["저가", k.low_price, "down"], ["종가", k.trade_price, d]]
-    .map(([label, v, cls]) => `<div><span>${label}</span><b class="${cls}">${fmtPrice(v)}</b></div>`).join("");
+    .map(([label, v, cls]) => `<div><span>${label}</span><b class="${cls}">${fmtPx(state.detail, v)}</b></div>`).join("");
 }
 
 function pickCandle(e) {
@@ -651,19 +891,35 @@ function setChartType(type) {
 }
 
 /* ---------------- 관심목록 ---------------- */
+const US_MARKETS = new Set(["US", "NASDAQ", "NYSE", "ARCA", "AMEX", "BATS"]);
 async function loadWatch() {
-  if (!sb || !state.session) { state.watch = []; state.watchLoaded = true; renderWatch(); return; }
+  if (!sb || !state.session) {
+    state.watch = []; state.watchLoaded = true; renderWatch();
+    loadStockQuotes(visibleStockCodes());
+    return;
+  }
   const { data, error } = await sb.from("watchlist")
-    .select("asset_id, sort_order, created_at, assets(symbol, name, type)")
+    .select("asset_id, sort_order, created_at, assets(symbol, name, type, market, meta)")
     .order("sort_order").order("created_at");
   if (error) toast("관심목록을 불러오지 못했어요: " + error.message);
-  state.watch = (data || [])
-    .filter((r) => r.assets && r.assets.type === "coin")
-    .map((r) => ({ asset_id: r.asset_id, code: r.assets.symbol, name: r.assets.name }));
+  state.watch = (data || []).map((r) => {
+    const a = r.assets;
+    if (!a) return null;
+    if (a.type === "coin") return { asset_id: r.asset_id, code: a.symbol, name: a.name };
+    if (a.type === "stock" && ((a.meta && a.meta.country === "US") || US_MARKETS.has(a.market))) {
+      const code = "US:" + a.symbol;
+      const s = state.stocks.get(code);
+      if (!s) state.stocks.set(code, { code, sym: a.symbol, ko: null, en: a.name, exch: a.market, alias: "" });
+      else if (!s.exch) s.exch = a.market;
+      return { asset_id: r.asset_id, code, name: nameOf(code) };
+    }
+    return null; // 아직 지원하지 않는 자산 (국내 주식 등)
+  }).filter(Boolean);
   state.watchLoaded = true;
   renderWatch();
   renderMarket();
   loadSparks();
+  loadStockQuotes(visibleStockCodes());
 }
 
 async function toggleWatch(code) {
@@ -676,12 +932,21 @@ async function toggleWatch(code) {
     state.watch = state.watch.filter((w) => w !== existing);
     toast("관심목록에서 뺐어요");
   } else {
-    const m = state.markets.get(code);
-    const { data: assetId, error } = await sb.rpc("ensure_coin_asset", { p_symbol: code, p_name: m ? m.ko : code });
-    if (error) return toast("추가하지 못했어요: " + error.message);
+    const name = nameOf(code);
+    let res;
+    if (isStock(code)) {
+      const s = state.stocks.get(code) || {};
+      res = await sb.rpc("ensure_us_stock_asset", { p_symbol: symOf(code), p_name: name, p_exchange: s.exch || null });
+      if (res.error && /ensure_us_stock_asset/.test(res.error.message))
+        return toast("미국 주식용 SQL(setup_v3_us_stocks.sql)을 먼저 실행해 주세요");
+    } else {
+      res = await sb.rpc("ensure_coin_asset", { p_symbol: code, p_name: name });
+    }
+    if (res.error) return toast("추가하지 못했어요: " + res.error.message);
+    const assetId = res.data;
     const { error: e2 } = await sb.from("watchlist").insert({ user_id: state.session.user.id, asset_id: assetId });
     if (e2 && e2.code !== "23505") return toast("추가하지 못했어요: " + e2.message);
-    state.watch.push({ asset_id: assetId, code, name: m ? m.ko : code });
+    state.watch.push({ asset_id: assetId, code, name });
     toast("관심목록에 담았어요");
     loadSparks();
   }
@@ -690,15 +955,30 @@ async function toggleWatch(code) {
   if (state.detail === code) renderDetailToggle();
 }
 
+function cardHTML(w) {
+  return `
+    <button class="card" data-open="${w.code}">
+      <div class="card-top">
+        <div><div class="name">${esc(w.name)}</div><div class="sym">${esc(symOf(w.code))}</div></div>
+        <div class="right">${pxSpan(w.code)}${pctSpan(w.code, "badge pct num")}</div>
+      </div>
+      <svg class="spark" data-spark="${w.code}" viewBox="0 0 100 30" preserveAspectRatio="none"></svg>
+    </button>`;
+}
+const sessionTag = `<span class="mk hidden" data-session></span>`;
+
 function renderWatch() {
   const body = $("#watchBody");
-  $("#watchTitle").textContent = state.watch.length ? `관심 코인 ${state.watch.length}개` : "관심 코인";
+  $("#watchTitle").textContent = state.watch.length ? `관심목록 ${state.watch.length}개` : "관심목록";
   if (!sb || !state.session) {
     const preview = state.order.slice(0, 5);
+    const stockPreview = configured && !state.stockError ? state.stockOrder.slice(0, 5) : [];
     body.innerHTML = `
-      <div class="notice"><b>나만의 관심목록 만들기</b>로그인하면 관심 코인을 저장하고, 관련 뉴스도 모아 볼 수 있어요.
+      <div class="notice"><b>나만의 관심목록 만들기</b>로그인하면 관심 코인과 미국 주식을 저장하고, 관련 뉴스도 모아 볼 수 있어요.
         <div style="margin-top:12px"><button class="btn" data-action="login">로그인 / 회원가입</button></div></div>
-      ${preview.length ? `<h2>거래대금 상위</h2><div class="list">${preview.map(rowHTML).join("")}</div>` : ""}`;
+      ${preview.length ? `<h2>코인 거래대금 상위</h2><div class="list">${preview.map(rowHTML).join("")}</div>` : ""}
+      ${stockPreview.length ? `<h2>인기 미국 주식 ${sessionTag}</h2><div class="list">${stockPreview.map(rowHTML).join("")}</div>` : ""}`;
+    renderSessionInfo();
     return;
   }
   if (!state.watchLoaded) {
@@ -706,34 +986,36 @@ function renderWatch() {
     return;
   }
   if (!state.watch.length) {
-    body.innerHTML = `<div class="empty">아직 담은 코인이 없어요.<br><br><button class="btn" data-goto="market">코인 찾으러 가기</button></div>`;
+    body.innerHTML = `<div class="empty">아직 담은 종목이 없어요.<br><br><button class="btn" data-goto="market">찾으러 가기</button></div>`;
     return;
   }
-  const warn = state.marketError
-    ? `<div class="notice">시세를 불러오지 못하고 있어요. 코인 찾기 탭에서 ‘다시 시도’를 눌러 주세요.</div>` : "";
-  body.innerHTML = warn + `<div class="cards">${state.watch.map((w) => `
-    <button class="card" data-open="${w.code}">
-      <div class="card-top">
-        <div><div class="name">${esc(w.name)}</div><div class="sym">${symOf(w.code)}</div></div>
-        <div class="right">${pxSpan(w.code)}${pctSpan(w.code, "badge pct num")}</div>
-      </div>
-      <svg class="spark" data-spark="${w.code}" viewBox="0 0 100 30" preserveAspectRatio="none"></svg>
-    </button>`).join("")}</div>`;
+  const coins = state.watch.filter((w) => !isStock(w.code));
+  const stocks = state.watch.filter((w) => isStock(w.code));
+  let warn = "";
+  if (coins.length && state.marketError)
+    warn += `<div class="notice">코인 시세를 불러오지 못하고 있어요. 찾기 탭에서 ‘다시 시도’를 눌러 주세요.</div>`;
+  if (stocks.length && state.stockError)
+    warn += `<div class="notice">미국 주식 시세를 불러오지 못하고 있어요.<br><small>${esc(state.stockError)}</small></div>`;
+  const section = (title, list) => `<h2>${title}</h2><div class="cards">${list.map(cardHTML).join("")}</div>`;
+  body.innerHTML = warn
+    + (coins.length && stocks.length ? section("코인", coins) : coins.length ? `<div class="cards">${coins.map(cardHTML).join("")}</div>` : "")
+    + (stocks.length ? section(`미국 주식 ${sessionTag}`, stocks) : "");
   state.watch.forEach((w) => drawSpark(w.code));
+  renderSessionInfo();
 }
 
-/* ---------------- 코인 찾기 ---------------- */
+/* ---------------- 찾기 (코인 / 미국 주식) ---------------- */
 function rowHTML(code) {
-  const m = state.markets.get(code);
   const on = state.watch.some((w) => w.code === code);
   return `<div class="row">
-    <button class="r-name" data-open="${code}"><b>${esc(m.ko)}</b><span>${symOf(code)} · ${esc(m.en)}</span></button>
+    <button class="r-name" data-open="${code}"><b>${esc(nameOf(code))}</b><span>${esc(subOf(code))}</span></button>
     <button class="r-px" data-open="${code}">${pxSpan(code)}${pctSpan(code)}</button>
     <button class="star ${on ? "on" : ""}" data-star="${code}" aria-label="${on ? "관심목록에서 빼기" : "관심목록에 담기"}">★</button>
   </div>`;
 }
 function renderMarket() {
   const body = $("#marketBody");
+  if (state.kind === "stock") return renderStockMarket(body);
   if (state.marketError) {
     body.innerHTML = `<div class="empty">시세를 불러오지 못했어요. 잠시 후 새로고침해 주세요.<br>
       <small>(${esc(state.marketError)})</small><br><br><button class="btn ghost" data-action="retry">다시 시도</button></div>`;
@@ -752,11 +1034,93 @@ function renderMarket() {
     : `<div class="empty">"${esc(q)}"에 맞는 코인이 없어요</div>`;
 }
 
+// 미국 주식 목록: 검색어가 없으면 인기 종목, 있으면 인기 종목 중 맞는 것 + 전체 검색 결과
+function stockListCodes() {
+  const q = $("#q").value.trim().toLowerCase();
+  if (!q) return state.stockOrder;
+  const score = (c) => {
+    const s = state.stocks.get(c), sym = s.sym.toLowerCase();
+    if (sym === q) return 0;
+    if (sym.startsWith(q)) return 1;
+    if ((s.ko || "").toLowerCase().startsWith(q) || (s.en || "").toLowerCase().startsWith(q)) return 2;
+    return [s.ko, s.en, s.alias].some((v) => v && v.toLowerCase().includes(q)) ? 3 : -1;
+  };
+  const local = state.stockOrder.map((c) => [score(c), c]).filter(([n]) => n >= 0)
+    .sort((a, b) => a[0] - b[0]).map(([, c]) => c);
+  const remote = state.stockSearch.q === q ? state.stockSearch.codes : [];
+  return [...new Set([...local, ...remote])];
+}
+function renderStockMarket(body) {
+  if (!configured) {
+    body.innerHTML = `<div class="empty">미국 주식은 Supabase 연결 정보를 넣은 뒤에 볼 수 있어요</div>`;
+    return;
+  }
+  const q = $("#q").value.trim().toLowerCase();
+  const codes = stockListCodes();
+  const loading = q && state.stockSearch.q === q && state.stockSearch.loading;
+  const err = state.stockError
+    ? `<div class="notice"><b>미국 주식 시세를 불러오지 못했어요</b><small>${esc(state.stockError)}</small>
+        <div style="margin-top:12px"><button class="btn ghost" data-action="retry-stock">다시 시도</button></div></div>` : "";
+  let list;
+  if (codes.length) {
+    list = `<div class="list">${codes.map(rowHTML).join("")}</div>`
+      + (loading ? `<div class="empty" style="padding:16px">더 찾는 중…</div>` : "");
+  } else if (loading) {
+    list = `<div class="empty">찾는 중…</div>`;
+  } else {
+    const hint = /[ㄱ-ㅎ가-힣]/.test(q) ? "<br>한글 이름은 인기 종목만 찾을 수 있어요. 영문 이름이나 티커로 찾아 보세요." : "";
+    list = `<div class="empty">"${esc(q)}"에 맞는 종목이 없어요${hint}</div>`;
+  }
+  body.innerHTML = err + `<div class="market-note" id="marketNote"></div>`
+    + (q ? "" : `<h2 style="margin-top:4px">인기 미국 주식·ETF</h2>`) + list;
+  renderSessionInfo();
+}
+
+// 영문 이름·티커로 전체 미국 주식 검색 (입력이 멈추면 한 번)
+let searchTimer = 0, searchSeq = 0;
+function scheduleStockSearch() {
+  clearTimeout(searchTimer);
+  const q = $("#q").value.trim().toLowerCase();
+  const ascii = q && !/[ㄱ-ㅎ가-힣]/.test(q) && configured;
+  state.stockSearch = { q, codes: [], loading: !!ascii };
+  if (!ascii) return;
+  const seq = ++searchSeq;
+  searchTimer = setTimeout(async () => {
+    let codes = [];
+    try {
+      const j = await stockApi({ action: "search", q });
+      codes = j.results.map((r) => {
+        const code = "US:" + r.symbol;
+        const s = state.stocks.get(code);
+        if (!s) state.stocks.set(code, { code, sym: r.symbol, ko: null, en: r.name, exch: r.exchange, alias: "" });
+        else if (!s.exch) s.exch = r.exchange;
+        return code;
+      });
+    } catch (_) {}
+    if (seq !== searchSeq) return;
+    state.stockSearch = { q, codes, loading: false };
+    renderMarket();
+    loadStockQuotes(visibleStockCodes());
+  }, 350);
+}
+function setKind(kind) {
+  state.kind = kind;
+  document.querySelectorAll("[data-kind]").forEach((b) => b.classList.toggle("on", b.dataset.kind === kind));
+  const q = $("#q");
+  q.value = "";
+  q.placeholder = kind === "stock" ? "종목 이름이나 티커 검색 (예: 애플, TSLA)" : "코인 이름이나 기호 검색 (예: 비트, BTC)";
+  clearTimeout(searchTimer);
+  state.stockSearch = { q: "", codes: [], loading: false };
+  window.scrollTo(0, 0);
+  renderMarket();
+  if (kind === "stock") loadStockQuotes(visibleStockCodes());
+}
+
 /* ---------------- 뉴스 ---------------- */
 async function loadNews() {
   const body = $("#newsBody");
   if (!sb || !state.session) {
-    body.innerHTML = `<div class="notice"><b>로그인이 필요해요</b>관심목록에 담은 코인의 뉴스만 모아서 보여드려요.
+    body.innerHTML = `<div class="notice"><b>로그인이 필요해요</b>관심목록에 담은 종목의 뉴스만 모아서 보여드려요.
       <div style="margin-top:12px"><button class="btn" data-action="login">로그인</button></div></div>`;
     return;
   }
@@ -766,7 +1130,7 @@ async function loadNews() {
   if (!data.length) {
     body.innerHTML = `<div class="empty">${state.watch.length
       ? "아직 모인 뉴스가 없어요.<br>위의 ‘새로 가져오기’를 눌러 보세요."
-      : "관심목록에 코인을 담으면 관련 뉴스가 여기 모여요."}</div>`;
+      : "관심목록에 종목을 담으면 관련 뉴스가 여기 모여요."}</div>`;
     return;
   }
   body.innerHTML = data.map((n) => `
@@ -780,7 +1144,7 @@ async function loadNews() {
 
 async function refreshNews() {
   if (!sb || !state.session) return openSheet("auth");
-  if (!state.watch.length) return toast("먼저 관심목록에 코인을 담아 주세요");
+  if (!state.watch.length) return toast("먼저 관심목록에 종목을 담아 주세요");
   const btn = $("#newsRefresh");
   btn.disabled = true;
   btn.textContent = "가져오는 중…";
@@ -800,15 +1164,19 @@ async function refreshNews() {
 
 /* ---------------- 상세 시트 ---------------- */
 function openDetail(code) {
-  const m = state.markets.get(code);
-  if (!m) return;
+  const stock = isStock(code);
+  if (stock ? !state.stocks.has(code) : !state.markets.has(code)) return;
   openSheet("detail"); // 다른 시트를 먼저 닫고 열기 (closeSheets 가 detail 을 비우므로 먼저 호출)
   state.detail = code;
-  $("#dName").textContent = m.ko;
-  $("#dSym").textContent = `${symOf(code)} · ${m.en}`;
+  $("#dName").textContent = nameOf(code);
+  $("#dSym").textContent = subOf(code);
   const px = $("#dPx"); px.dataset.px = code; px.dataset.v = ""; px.textContent = "";
-  const pct = $("#dPct"); pct.dataset.pct = code;
+  const pct = $("#dPct"); pct.dataset.pct = code; pct.textContent = ""; pct.className = "badge pct num";
   $("#dHL").textContent = "-";
+  $("#dVol").textContent = "-";
+  $("#dVolLabel").textContent = stock ? "거래대금 (최근 거래일)" : "24시간 거래대금";
+  renderSessionInfo();
+  if (stock) loadStockQuotes([code]);
   $("#ranges").innerHTML = Object.entries(RANGES)
     .map(([k, r]) => `<button data-range="${k}" class="${k === state.range ? "on" : ""}">${r.label}</button>`).join("");
   document.querySelectorAll("[data-ctype]").forEach((b) => b.classList.toggle("on", b.dataset.ctype === state.ctype));
@@ -843,6 +1211,7 @@ function setTab(tab) {
   document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
   window.scrollTo(0, 0);
   if (tab === "news") loadNews();
+  loadStockQuotes(visibleStockCodes());
 }
 function setAuthMode(mode) {
   state.authMode = mode;
@@ -889,7 +1258,11 @@ $("#logoutBtn").addEventListener("click", async () => { await sb.auth.signOut();
 $("#backdrop").addEventListener("click", closeSheets);
 $("#newsRefresh").addEventListener("click", refreshNews);
 $("#dToggle").addEventListener("click", () => state.detail && toggleWatch(state.detail));
-$("#q").addEventListener("input", renderMarket);
+$("#q").addEventListener("input", () => {
+  if (state.kind === "stock") scheduleStockSearch();
+  renderMarket();
+  if (state.kind === "stock") loadStockQuotes(visibleStockCodes());
+});
 
 // 차트를 누르거나 손가락으로 옆으로 밀면 그 봉의 가격을 보여줘요
 const chartWrapEl = $("#chartWrap");
@@ -908,9 +1281,15 @@ window.addEventListener("resize", () => {
 
 // 화면 곳곳의 버튼 클릭을 한곳에서 처리
 document.addEventListener("click", (e) => {
-  const el = e.target.closest("[data-star],[data-open],[data-tab],[data-goto],[data-action],[data-range],[data-ctype],[data-close]");
+  const el = e.target.closest("[data-star],[data-open],[data-tab],[data-goto],[data-action],[data-range],[data-ctype],[data-kind],[data-close]");
   if (!el) return;
   if (el.dataset.ctype) return setChartType(el.dataset.ctype);
+  if (el.dataset.kind) return setKind(el.dataset.kind);
+  if (el.dataset.action === "retry-stock") {
+    state.stockError = false;
+    renderMarket();
+    return loadStockQuotes(visibleStockCodes(), true);
+  }
   if (el.dataset.star) return toggleWatch(el.dataset.star);
   if (el.dataset.open) return openDetail(el.dataset.open);
   if (el.dataset.tab) return setTab(el.dataset.tab);
