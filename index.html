@@ -206,7 +206,8 @@ nav button.on{color:var(--text)}
     <div class="search">
       <div class="ranges kinds" id="kinds">
         <button data-kind="coin" class="on">코인</button>
-        <button data-kind="stock">미국 주식</button>
+        <button data-kind="kr">국내 주식</button>
+        <button data-kind="us">미국 주식</button>
       </div>
       <input id="q" type="search" placeholder="코인 이름이나 기호 검색 (예: 비트, BTC)" autocomplete="off">
     </div>
@@ -222,7 +223,7 @@ nav button.on{color:var(--text)}
     <div id="newsBody"></div>
   </section>
 
-  <p class="disclaimer">코인 시세: 업비트 · 미국 주식 시세: Alpaca (현재가는 IEX 거래소 실시간, 차트와 거래대금은 전체 시장 기준 15분 지연)<br>뉴스: 블록미디어, 토큰포스트, 한국경제 RSS (기사 저작권은 각 언론사에 있어요)<br>이 사이트는 정보 제공용이며 투자 권유가 아니에요.</p>
+  <p class="disclaimer">코인 시세: 업비트 · 국내 주식 시세: 한국투자증권 Open API · 미국 주식 시세: Alpaca (현재가는 IEX 거래소 실시간, 차트와 거래대금은 전체 시장 기준 15분 지연)<br>뉴스: 블록미디어, 토큰포스트, 한국경제, 매일경제 RSS (기사 저작권은 각 언론사에 있어요)<br>이 사이트는 정보 제공용이며 투자 권유가 아니에요.</p>
 </main>
 
 <nav>
@@ -329,23 +330,27 @@ const state = {
   candles: null,        // 상세 차트에 쓰는 봉 데이터 (오래된 것부터)
   chartMeta: null,      // 차트 좌표 계산용
   ws: null,
-  // 미국 주식 (코드는 "US:AAPL" 처럼 써요)
-  kind: "coin",         // 찾기 탭에서 보고 있는 종류: coin | stock
-  stocks: new Map(),    // "US:AAPL" -> { code, sym, ko, en, exch, alias }
-  stockOrder: [],       // 인기 종목 순서
-  stockSession: null,   // regular | pre | after | closed
-  stockNextOpen: null,
-  stockFull: true,      // 전체 시장(15분 지연) 데이터를 받을 수 있는지
-  stockError: false,
+  // 주식 (코드는 국내 "KR:005930", 미국 "US:AAPL" 처럼 써요)
+  kind: "coin",         // 찾기 탭에서 보고 있는 종류: coin | kr | us
+  stocks: new Map(),    // "KR:005930" -> { code, sym, ko, en, exch, alias }
+  krOrder: [],          // 인기 국내 종목 순서
+  usOrder: [],          // 인기 미국 종목 순서
+  mk: {                 // 시장별 장 상태와 오류
+    KR: { session: null, nextOpen: null, error: false },  // session: regular | pre | after | closed
+    US: { session: null, nextOpen: null, error: false },
+  },
   stockAt: new Map(),   // code -> 마지막으로 현재가를 받은 시각
-  stockSearch: { q: "", codes: [], loading: false },
+  stockSearch: { q: "", kind: "coin", codes: [], loading: false },
 };
 
 const $ = (s) => document.querySelector(s);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const isStock = (code) => String(code).startsWith("US:");
-const symOf = (code) => code.replace(/^(KRW-|US:)/, "");
+const isUS = (code) => String(code).startsWith("US:");
+const isKR = (code) => String(code).startsWith("KR:");
+const isStock = (code) => isUS(code) || isKR(code);
+const mkOf = (code) => (isKR(code) ? "KR" : "US");
+const symOf = (code) => code.replace(/^(KRW-|US:|KR:)/, "");
 
 /* 인기 미국 주식·ETF (한글 이름으로도 찾을 수 있게)
    [티커, 한글 이름, 영문 이름, 다른 이름(검색용)] */
@@ -400,9 +405,42 @@ const US_POPULAR = [
 US_POPULAR.forEach(([sym, ko, en, alias = ""]) => {
   const code = "US:" + sym;
   state.stocks.set(code, { code, sym, ko, en, exch: "", alias });
-  state.stockOrder.push(code);
+  state.usOrder.push(code);
 });
-const EXCH = { NASDAQ: "나스닥", NYSE: "뉴욕", ARCA: "NYSE Arca", AMEX: "NYSE American", BATS: "Cboe" };
+
+/* 인기 국내 주식·ETF [종목코드, 이름, 다른 이름(검색용)] — 나머지는 이름·코드로 전체 검색돼요 */
+const KR_POPULAR = [
+  ["005930", "삼성전자", "삼전"], ["000660", "SK하이닉스", "하이닉스 하닉"], ["373220", "LG에너지솔루션", "엔솔 엘지"],
+  ["207940", "삼성바이오로직스", "삼바"], ["005380", "현대차", "현대자동차"], ["000270", "기아", "기아차"],
+  ["012450", "한화에어로스페이스", "한화에어로"], ["068270", "셀트리온"], ["035420", "NAVER", "네이버"],
+  ["035720", "카카오"], ["105560", "KB금융", "국민은행"], ["055550", "신한지주", "신한금융"],
+  ["329180", "HD현대중공업", "현대중공업"], ["042660", "한화오션", "대우조선"], ["267260", "HD현대일렉트릭", "현대일렉트릭"],
+  ["005490", "POSCO홀딩스", "포스코"], ["006400", "삼성SDI"], ["051910", "LG화학", "엘지화학"],
+  ["012330", "현대모비스"], ["028260", "삼성물산"], ["032830", "삼성생명"], ["086790", "하나금융지주", "하나금융"],
+  ["034020", "두산에너빌리티", "두산"], ["010140", "삼성중공업"], ["009150", "삼성전기"],
+  ["066570", "LG전자", "엘지전자"], ["096770", "SK이노베이션"], ["015760", "한국전력", "한전"], ["011200", "HMM"],
+  ["003670", "포스코퓨처엠"], ["323410", "카카오뱅크", "카뱅"], ["259960", "크래프톤"], ["402340", "SK스퀘어"],
+  ["017670", "SK텔레콤", "SKT"], ["030200", "KT"], ["316140", "우리금융지주", "우리금융"],
+  ["138040", "메리츠금융지주", "메리츠"], ["010130", "고려아연"], ["042700", "한미반도체"], ["064350", "현대로템"],
+  ["047810", "한국항공우주", "KAI"], ["079550", "LIG넥스원"], ["003230", "삼양식품", "불닭"], ["352820", "하이브"],
+  ["033780", "KT&G"], ["018260", "삼성SDS"], ["000810", "삼성화재"], ["024110", "기업은행", "IBK"],
+  ["003490", "대한항공"], ["005935", "삼성전자우", "삼전우"],
+  ["247540", "에코프로비엠"], ["086520", "에코프로"], ["196170", "알테오젠"], ["028300", "HLB", "에이치엘비"],
+  ["277810", "레인보우로보틱스"],
+  ["069500", "KODEX 200", "코덱스"], ["102110", "TIGER 200", "타이거"], ["122630", "KODEX 레버리지", "레버리지"],
+  ["252670", "KODEX 200선물인버스2X", "곱버스 인버스"], ["114800", "KODEX 인버스", "인버스"],
+  ["233740", "KODEX 코스닥150레버리지", "코스닥 레버리지"], ["360750", "TIGER 미국S&P500", "에스앤피"],
+  ["133690", "TIGER 미국나스닥100", "나스닥"],
+];
+KR_POPULAR.forEach(([sym, ko, alias = ""]) => {
+  const code = "KR:" + sym;
+  state.stocks.set(code, { code, sym, ko, en: "", exch: "", alias });
+  state.krOrder.push(code);
+});
+const EXCH = {
+  NASDAQ: "나스닥", NYSE: "뉴욕", ARCA: "NYSE Arca", AMEX: "NYSE American", BATS: "Cboe",
+  KOSPI: "코스피", KOSDAQ: "코스닥", KONEX: "코넥스",
+};
 
 // 화면에 보여줄 이름과 보조 설명
 function nameOf(code) {
@@ -413,7 +451,9 @@ function nameOf(code) {
 function subOf(code) {
   if (isStock(code)) {
     const s = state.stocks.get(code);
-    return [symOf(code), s && s.ko ? s.en : "", s && EXCH[s.exch] ? EXCH[s.exch] : ""].filter(Boolean).join(" · ");
+    const ex = s && EXCH[s.exch] ? EXCH[s.exch] : "";
+    if (isKR(code)) return [symOf(code), ex].filter(Boolean).join(" · ");
+    return [symOf(code), s && s.ko ? s.en : "", ex].filter(Boolean).join(" · ");
   }
   const m = state.markets.get(code);
   return `${symOf(code)}${m ? " · " + m.en : ""}`;
@@ -443,14 +483,14 @@ function fmtUSD(p) {
   if (p >= 1) return "$" + p.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return "$" + p.toLocaleString("en-US", { maximumSignificantDigits: 4 });
 }
-const fmtPx = (code, p) => (isStock(code) ? fmtUSD(p) : fmtPrice(p));
+const fmtPx = (code, p) => (isUS(code) ? fmtUSD(p) : fmtPrice(p));
 function fmtUSDVol(v) {
   if (!v) return "-";
   if (v >= 1e8) return (v / 1e8).toLocaleString("ko-KR", { maximumFractionDigits: v >= 1e10 ? 0 : 1 }) + "억 달러";
   if (v >= 1e4) return Math.round(v / 1e4).toLocaleString("ko-KR") + "만 달러";
   return "$" + Math.round(v).toLocaleString("en-US");
 }
-const fmtVol = (code, v) => (isStock(code) ? fmtUSDVol(v) : fmtKRW(v));
+const fmtVol = (code, v) => (isUS(code) ? fmtUSDVol(v) : fmtKRW(v));
 function ago(iso) {
   const m = (Date.now() - new Date(iso).getTime()) / 60000;
   if (m < 1) return "방금";
@@ -566,18 +606,21 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible" && !state.ws) connectWS();
 });
 
-/* ---------------- 시세 (미국 주식, Supabase 의 stocks 함수 → Alpaca) ---------------- */
-async function stockApi(params) {
+/* ---------------- 시세 (주식: 국내는 krstocks 함수 → 한국투자, 미국은 stocks 함수 → Alpaca) ---------------- */
+const FN = { US: "stocks", KR: "krstocks" };
+const BATCH = { US: 100, KR: 90 };
+async function stockApi(M, params) {
   if (!configured) throw new Error("Supabase 연결 정보가 필요해요");
-  const r = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/stocks?${new URLSearchParams(params)}`,
+  const fn = FN[M];
+  const r = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/${fn}?${new URLSearchParams(params)}`,
     { headers: { apikey: CONFIG.SUPABASE_KEY } });
   let j = null;
   try { j = await r.json(); } catch (_) {}
   if (!r.ok) {
     if (j && j.error) throw new Error(j.error);
-    if (r.status === 404) throw new Error("Supabase 에 stocks 함수가 아직 없어요");
-    if (r.status === 401) throw new Error("stocks 함수의 Verify JWT 를 꺼 주세요");
-    throw new Error(`stocks 함수 응답 ${r.status}${j && j.message ? ": " + j.message : ""}`);
+    if (r.status === 404) throw new Error(`Supabase 에 ${fn} 함수가 아직 없어요`);
+    if (r.status === 401) throw new Error(`${fn} 함수의 Verify JWT 를 꺼 주세요`);
+    throw new Error(`${fn} 함수 응답 ${r.status}${j && j.message ? ": " + j.message : ""}`);
   }
   return j;
 }
@@ -589,80 +632,100 @@ async function loadStockQuotes(codes, force = false) {
   const need = [...new Set(codes)].filter((c) => isStock(c) && (force || now - (state.stockAt.get(c) || 0) > 10000));
   if (!need.length) return;
   need.forEach((c) => state.stockAt.set(c, now)); // 같은 종목을 동시에 두 번 요청하지 않게
-  try {
-    for (let i = 0; i < need.length; i += 100) {
-      const part = need.slice(i, i + 100);
-      const j = await stockApi({ action: "quotes", symbols: part.map(symOf).join(",") });
-      for (const c of part) {
-        const q = j.quotes[symOf(c)];
-        state.stockAt.set(c, Date.now());
-        if (q) state.tickers.set(c, { price: q.price, rate: q.rate, vol: q.vol, prevClose: q.prevClose });
+  let metaChanged = false; // 시장 이름·종목명을 새로 알게 되면 목록을 한 번 다시 그려요
+  await Promise.all(["KR", "US"].map(async (M) => {
+    const list = need.filter((c) => mkOf(c) === M);
+    if (!list.length) return;
+    const m = state.mk[M];
+    try {
+      for (let i = 0; i < list.length; i += BATCH[M]) {
+        const part = list.slice(i, i + BATCH[M]);
+        const j = await stockApi(M, { action: "quotes", symbols: part.map(symOf).join(",") });
+        for (const c of part) {
+          const q = j.quotes[symOf(c)];
+          state.stockAt.set(c, Date.now());
+          if (!q) continue;
+          state.tickers.set(c, { price: q.price, rate: q.rate, vol: q.vol, prevClose: q.prevClose });
+          const st = state.stocks.get(c);
+          if (st && q.market && st.exch !== q.market) { st.exch = q.market; metaChanged = true; }
+          if (st && !st.ko && q.name) { st.ko = q.name; metaChanged = true; }
+        }
+        m.session = j.session;
+        m.nextOpen = j.nextOpen;
       }
-      state.stockSession = j.session;
-      state.stockNextOpen = j.nextOpen;
-      state.stockFull = j.full !== false;
+      if (m.error) { m.error = false; renderMarket(); renderWatch(); }
+    } catch (e) {
+      list.forEach((c) => state.stockAt.delete(c));
+      const first = !m.error;
+      m.error = e.message || "알 수 없는 오류";
+      if (first) { renderMarket(); renderWatch(); }
     }
-    if (state.stockError) { state.stockError = false; renderMarket(); renderWatch(); }
-    renderSessionInfo();
-    schedulePriceUpdate();
-  } catch (e) {
-    need.forEach((c) => state.stockAt.delete(c));
-    const first = !state.stockError;
-    state.stockError = e.message || "알 수 없는 오류";
-    if (first) { renderMarket(); renderWatch(); }
-  }
+  }));
+  if (metaChanged) { renderMarket(); renderWatch(); }
+  renderSessionInfo();
+  schedulePriceUpdate();
 }
 
-// 지금 화면에 보이는 미국 주식들
+// 지금 화면에 보이는 주식들
 function visibleStockCodes() {
   const s = new Set();
   state.watch.forEach((w) => isStock(w.code) && s.add(w.code));
-  if (state.tab === "watch" && !state.session) state.stockOrder.slice(0, 5).forEach((c) => s.add(c));
-  if (state.tab === "market" && state.kind === "stock") stockListCodes().slice(0, 100).forEach((c) => s.add(c));
+  if (state.tab === "watch" && !state.session) [...state.krOrder.slice(0, 5), ...state.usOrder.slice(0, 5)].forEach((c) => s.add(c));
+  if (state.tab === "market" && state.kind !== "coin") stockListCodes().slice(0, 100).forEach((c) => s.add(c));
   if (state.detail && isStock(state.detail)) s.add(state.detail);
   return [...s];
 }
 
-// 장이 열려 있으면 15초, 닫혀 있으면 1분마다 새로 받아요 (화면을 보고 있을 때만)
-let stockPollAt = 0;
+// 장이 열려 있으면 15초, 닫혀 있으면 1분마다 새로 받아요 (화면을 보고 있을 때만, 시장별로)
+const stockPollAt = { US: 0, KR: 0 };
 setInterval(() => {
   if (document.visibilityState !== "visible" || !configured) return;
-  const quiet = state.stockSession === "closed";
-  if (quiet && Date.now() - stockPollAt < 60000) return;
   const codes = visibleStockCodes();
-  if (!codes.length) return;
-  stockPollAt = Date.now();
-  loadStockQuotes(codes, true);
+  const pick = [];
+  for (const M of ["KR", "US"]) {
+    const list = codes.filter((c) => mkOf(c) === M);
+    if (!list.length) continue;
+    if (state.mk[M].session === "closed" && Date.now() - stockPollAt[M] < 60000) continue;
+    stockPollAt[M] = Date.now();
+    pick.push(...list);
+  }
+  if (pick.length) loadStockQuotes(pick, true);
 }, 15000);
 
-const SESSION_TEXT = { regular: "정규장", pre: "프리마켓", after: "애프터마켓", closed: "장 마감" };
-function nextOpenText() {
-  if (!state.stockNextOpen) return "";
-  const d = new Date(state.stockNextOpen);
+const SESSION_TEXT = {
+  US: { regular: "정규장", pre: "프리마켓", after: "애프터마켓", closed: "장 마감" },
+  KR: { regular: "정규장", pre: "장 시작 전", after: "시간외", closed: "장 마감" },
+};
+function nextOpenText(M) {
+  const v = state.mk[M].nextOpen;
+  if (!v) return "";
+  const d = new Date(v);
   if (isNaN(d)) return "";
   const p = Object.fromEntries(new Intl.DateTimeFormat("ko-KR", {
     timeZone: "Asia/Seoul", month: "numeric", day: "numeric", weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
   }).formatToParts(d).map((x) => [x.type, x.value]));
   return `${p.month}.${p.day} (${p.weekday}) ${p.hour}:${p.minute}`;
 }
-// 장 상태 표시 (찾기 탭 위쪽, 상세 시트)
+// 장 상태 표시 (찾기 탭 위쪽, 관심목록 제목 옆, 상세 시트)
 function renderSessionInfo() {
-  const s = state.stockSession;
   const note = $("#marketNote");
   if (note) {
-    const next = s !== "regular" ? nextOpenText() : "";
-    note.innerHTML = s ? `<span class="mk ${s}" style="margin:0">${SESSION_TEXT[s]}</span>`
-      + (next ? `<span>다음 정규장 ${next} (한국 시간)</span>` : "")
+    const M = note.dataset.mk, s = state.mk[M] && state.mk[M].session;
+    const next = s && s !== "regular" ? nextOpenText(M) : "";
+    note.innerHTML = s ? `<span class="mk ${s}" style="margin:0">${SESSION_TEXT[M][s]}</span>`
+      + (next ? `<span>다음 정규장 ${next}${M === "US" ? " (한국 시간)" : ""}</span>` : "")
       + (s === "regular" ? `<span>15초마다 새로 받아요</span>` : "") : "";
   }
   document.querySelectorAll("[data-session]").forEach((el) => {
+    const M = el.dataset.session, s = state.mk[M] && state.mk[M].session;
     el.className = s ? "mk " + s : "mk hidden";
-    el.textContent = s ? SESSION_TEXT[s] : "";
+    el.textContent = s ? SESSION_TEXT[M][s] : "";
   });
   const chip = $("#dSession");
-  const show = !!(s && state.detail && isStock(state.detail));
-  chip.className = show ? "mk " + s : "mk hidden";
-  chip.textContent = show ? SESSION_TEXT[s] : "";
+  const M = state.detail && isStock(state.detail) ? mkOf(state.detail) : null;
+  const s = M && state.mk[M].session;
+  chip.className = s ? "mk " + s : "mk hidden";
+  chip.textContent = s ? SESSION_TEXT[M][s] : "";
 }
 
 let priceFrame = 0;
@@ -722,17 +785,21 @@ function drawSpark(code) {
   const color = vals[vals.length - 1] >= vals[0] ? "var(--up)" : "var(--down)";
   svg.innerHTML = `<path d="${linePath(vals, 100, 30, 2)}" style="stroke:${color}"/>`;
 }
+// 주식 카드의 작은 그래프: 미국은 1시간봉 24개, 국내는 최근 24거래일 종가
 async function loadStockSparks(codes) {
-  for (let i = 0; i < codes.length; i += 50) {
-    const part = codes.slice(i, i + 50);
-    try {
-      const j = await stockApi({ action: "sparks", symbols: part.map(symOf).join(",") });
-      for (const c of part) {
-        const vals = j.sparks[symOf(c)];
-        if (vals && vals.length > 1) { state.spark.set(c, vals); drawSpark(c); }
-      }
-    } catch (_) {}
-  }
+  await Promise.all(["KR", "US"].map(async (M) => {
+    const list = codes.filter((c) => mkOf(c) === M), size = M === "KR" ? 30 : 50;
+    for (let i = 0; i < list.length; i += size) {
+      const part = list.slice(i, i + size);
+      try {
+        const j = await stockApi(M, { action: "sparks", symbols: part.map(symOf).join(",") });
+        for (const c of part) {
+          const vals = j.sparks[symOf(c)];
+          if (vals && vals.length > 1) { state.spark.set(c, vals); drawSpark(c); }
+        }
+      } catch (_) {}
+    }
+  }));
 }
 async function loadSparks() {
   const stockCodes = state.watch.filter((w) => isStock(w.code) && !state.spark.has(w.code)).map((w) => w.code);
@@ -758,10 +825,13 @@ const RANGES = {
   "3M": { label: "3개월", path: "days", count: 90, unit: "일봉" },
   "1Y": { label: "1년", path: "weeks", count: 52, unit: "주봉" },
 };
-// 미국 주식은 같은 기간 버튼을 쓰되 봉 크기가 달라요 (stocks 함수의 RANGES 와 맞춰요)
-const STOCK_UNITS = { "1H": "1분봉", "1D": "5분봉", "1W": "1시간봉", "3M": "일봉", "1Y": "주봉" };
-const unitOf = (code, range) => (isStock(code) ? STOCK_UNITS[range] : RANGES[range].unit);
-// Alpaca 봉을 업비트 봉 모양으로 바꿔요 (시각은 한국 시간)
+// 주식은 같은 기간 버튼을 쓰되 봉 크기가 달라요 (stocks·krstocks 함수의 RANGES 와 맞춰요)
+const STOCK_UNITS = {
+  US: { "1H": "1분봉", "1D": "5분봉", "1W": "1시간봉", "3M": "일봉", "1Y": "주봉" },
+  KR: { "1H": "1분봉", "1D": "5분봉", "1W": "30분봉", "3M": "일봉", "1Y": "주봉" },
+};
+const unitOf = (code, range) => (isStock(code) ? STOCK_UNITS[mkOf(code)][range] : RANGES[range].unit);
+// 주식 봉을 업비트 봉 모양으로 바꿔요 (시각은 한국 시간)
 const toCandle = (b) => ({
   candle_date_time_kst: new Date(Date.parse(b.t) + 9 * 3600e3).toISOString().slice(0, 19),
   opening_price: b.o, high_price: b.h, low_price: b.l, trade_price: b.c,
@@ -780,7 +850,7 @@ async function loadDetailChart() {
   try {
     let c;
     if (isStock(code)) {
-      const j = await stockApi({ action: "bars", symbol: symOf(code), range });
+      const j = await stockApi(mkOf(code), { action: "bars", symbol: symOf(code), range });
       c = j.bars.map(toCandle);                 // 오래된 것부터
     } else {
       const r = RANGES[range];
@@ -892,6 +962,7 @@ function setChartType(type) {
 
 /* ---------------- 관심목록 ---------------- */
 const US_MARKETS = new Set(["US", "NASDAQ", "NYSE", "ARCA", "AMEX", "BATS"]);
+const KR_MARKETS = new Set(["KOSPI", "KOSDAQ", "KONEX", "KRX"]);
 async function loadWatch() {
   if (!sb || !state.session) {
     state.watch = []; state.watchLoaded = true; renderWatch();
@@ -906,14 +977,16 @@ async function loadWatch() {
     const a = r.assets;
     if (!a) return null;
     if (a.type === "coin") return { asset_id: r.asset_id, code: a.symbol, name: a.name };
-    if (a.type === "stock" && ((a.meta && a.meta.country === "US") || US_MARKETS.has(a.market))) {
-      const code = "US:" + a.symbol;
-      const s = state.stocks.get(code);
-      if (!s) state.stocks.set(code, { code, sym: a.symbol, ko: null, en: a.name, exch: a.market, alias: "" });
-      else if (!s.exch) s.exch = a.market;
-      return { asset_id: r.asset_id, code, name: nameOf(code) };
-    }
-    return null; // 아직 지원하지 않는 자산 (국내 주식 등)
+    if (a.type !== "stock") return null; // 아직 지원하지 않는 자산 (부동산 등)
+    const country = a.meta && a.meta.country;
+    const kr = country === "KR" || (!country && KR_MARKETS.has(a.market));
+    const us = !kr && (country === "US" || US_MARKETS.has(a.market));
+    if (!kr && !us) return null;
+    const code = (kr ? "KR:" : "US:") + a.symbol;
+    const s = state.stocks.get(code);
+    if (!s) state.stocks.set(code, { code, sym: a.symbol, ko: kr ? a.name : null, en: kr ? "" : a.name, exch: a.market, alias: "" });
+    else if (!s.exch) s.exch = a.market;
+    return { asset_id: r.asset_id, code, name: nameOf(code) };
   }).filter(Boolean);
   state.watchLoaded = true;
   renderWatch();
@@ -933,12 +1006,16 @@ async function toggleWatch(code) {
     toast("관심목록에서 뺐어요");
   } else {
     const name = nameOf(code);
+    const s = state.stocks.get(code) || {};
     let res;
-    if (isStock(code)) {
-      const s = state.stocks.get(code) || {};
+    if (isUS(code)) {
       res = await sb.rpc("ensure_us_stock_asset", { p_symbol: symOf(code), p_name: name, p_exchange: s.exch || null });
       if (res.error && /ensure_us_stock_asset/.test(res.error.message))
         return toast("미국 주식용 SQL(setup_v3_us_stocks.sql)을 먼저 실행해 주세요");
+    } else if (isKR(code)) {
+      res = await sb.rpc("ensure_kr_stock_asset", { p_code: symOf(code), p_name: name, p_market: s.exch || null });
+      if (res.error && /ensure_kr_stock_asset/.test(res.error.message))
+        return toast("국내 주식용 SQL(setup_v4_kr_stocks_news.sql)을 먼저 실행해 주세요");
     } else {
       res = await sb.rpc("ensure_coin_asset", { p_symbol: code, p_name: name });
     }
@@ -965,19 +1042,23 @@ function cardHTML(w) {
       <svg class="spark" data-spark="${w.code}" viewBox="0 0 100 30" preserveAspectRatio="none"></svg>
     </button>`;
 }
-const sessionTag = `<span class="mk hidden" data-session></span>`;
+const sessionTag = (M) => `<span class="mk hidden" data-session="${M}"></span>`;
+const MK_NAME = { KR: "국내", US: "미국" };
 
 function renderWatch() {
   const body = $("#watchBody");
   $("#watchTitle").textContent = state.watch.length ? `관심목록 ${state.watch.length}개` : "관심목록";
   if (!sb || !state.session) {
     const preview = state.order.slice(0, 5);
-    const stockPreview = configured && !state.stockError ? state.stockOrder.slice(0, 5) : [];
+    const krPreview = configured && !state.mk.KR.error ? state.krOrder.slice(0, 5) : [];
+    const usPreview = configured && !state.mk.US.error ? state.usOrder.slice(0, 5) : [];
+    const list = (codes) => `<div class="list">${codes.map(rowHTML).join("")}</div>`;
     body.innerHTML = `
-      <div class="notice"><b>나만의 관심목록 만들기</b>로그인하면 관심 코인과 미국 주식을 저장하고, 관련 뉴스도 모아 볼 수 있어요.
+      <div class="notice"><b>나만의 관심목록 만들기</b>로그인하면 코인과 국내·미국 주식을 담아 두고, 관련 뉴스도 모아 볼 수 있어요.
         <div style="margin-top:12px"><button class="btn" data-action="login">로그인 / 회원가입</button></div></div>
-      ${preview.length ? `<h2>코인 거래대금 상위</h2><div class="list">${preview.map(rowHTML).join("")}</div>` : ""}
-      ${stockPreview.length ? `<h2>인기 미국 주식 ${sessionTag}</h2><div class="list">${stockPreview.map(rowHTML).join("")}</div>` : ""}`;
+      ${preview.length ? `<h2>코인 거래대금 상위</h2>${list(preview)}` : ""}
+      ${krPreview.length ? `<h2>인기 국내 주식 ${sessionTag("KR")}</h2>${list(krPreview)}` : ""}
+      ${usPreview.length ? `<h2>인기 미국 주식 ${sessionTag("US")}</h2>${list(usPreview)}` : ""}`;
     renderSessionInfo();
     return;
   }
@@ -990,21 +1071,26 @@ function renderWatch() {
     return;
   }
   const coins = state.watch.filter((w) => !isStock(w.code));
-  const stocks = state.watch.filter((w) => isStock(w.code));
+  const krs = state.watch.filter((w) => isKR(w.code));
+  const uss = state.watch.filter((w) => isUS(w.code));
   let warn = "";
   if (coins.length && state.marketError)
     warn += `<div class="notice">코인 시세를 불러오지 못하고 있어요. 찾기 탭에서 ‘다시 시도’를 눌러 주세요.</div>`;
-  if (stocks.length && state.stockError)
-    warn += `<div class="notice">미국 주식 시세를 불러오지 못하고 있어요.<br><small>${esc(state.stockError)}</small></div>`;
+  for (const [M, list] of [["KR", krs], ["US", uss]]) {
+    if (list.length && state.mk[M].error)
+      warn += `<div class="notice">${MK_NAME[M]} 주식 시세를 불러오지 못하고 있어요.<br><small>${esc(state.mk[M].error)}</small></div>`;
+  }
   const section = (title, list) => `<h2>${title}</h2><div class="cards">${list.map(cardHTML).join("")}</div>`;
+  const groups = [coins, krs, uss].filter((l) => l.length).length;
   body.innerHTML = warn
-    + (coins.length && stocks.length ? section("코인", coins) : coins.length ? `<div class="cards">${coins.map(cardHTML).join("")}</div>` : "")
-    + (stocks.length ? section(`미국 주식 ${sessionTag}`, stocks) : "");
+    + (coins.length ? (groups > 1 ? section("코인", coins) : `<div class="cards">${coins.map(cardHTML).join("")}</div>`) : "")
+    + (krs.length ? section(`국내 주식 ${sessionTag("KR")}`, krs) : "")
+    + (uss.length ? section(`미국 주식 ${sessionTag("US")}`, uss) : "");
   state.watch.forEach((w) => drawSpark(w.code));
   renderSessionInfo();
 }
 
-/* ---------------- 찾기 (코인 / 미국 주식) ---------------- */
+/* ---------------- 찾기 (코인 / 국내 주식 / 미국 주식) ---------------- */
 function rowHTML(code) {
   const on = state.watch.some((w) => w.code === code);
   return `<div class="row">
@@ -1015,7 +1101,7 @@ function rowHTML(code) {
 }
 function renderMarket() {
   const body = $("#marketBody");
-  if (state.kind === "stock") return renderStockMarket(body);
+  if (state.kind !== "coin") return renderStockMarket(body);
   if (state.marketError) {
     body.innerHTML = `<div class="empty">시세를 불러오지 못했어요. 잠시 후 새로고침해 주세요.<br>
       <small>(${esc(state.marketError)})</small><br><br><button class="btn ghost" data-action="retry">다시 시도</button></div>`;
@@ -1034,32 +1120,37 @@ function renderMarket() {
     : `<div class="empty">"${esc(q)}"에 맞는 코인이 없어요</div>`;
 }
 
-// 미국 주식 목록: 검색어가 없으면 인기 종목, 있으면 인기 종목 중 맞는 것 + 전체 검색 결과
+const kindMk = () => (state.kind === "kr" ? "KR" : "US");
+// 주식 목록: 검색어가 없으면 인기 종목, 있으면 인기 종목 중 맞는 것 + 전체 검색 결과
 function stockListCodes() {
+  const order = state.kind === "kr" ? state.krOrder : state.usOrder;
   const q = $("#q").value.trim().toLowerCase();
-  if (!q) return state.stockOrder;
+  if (!q) return order;
   const score = (c) => {
     const s = state.stocks.get(c), sym = s.sym.toLowerCase();
     if (sym === q) return 0;
     if (sym.startsWith(q)) return 1;
     if ((s.ko || "").toLowerCase().startsWith(q) || (s.en || "").toLowerCase().startsWith(q)) return 2;
-    return [s.ko, s.en, s.alias].some((v) => v && v.toLowerCase().includes(q)) ? 3 : -1;
+    return [s.ko, s.en, s.alias].some((v) => v && v.toLowerCase().replace(/\s+/g, "").includes(q.replace(/\s+/g, ""))) ? 3 : -1;
   };
-  const local = state.stockOrder.map((c) => [score(c), c]).filter(([n]) => n >= 0)
+  const local = order.map((c) => [score(c), c]).filter(([n]) => n >= 0)
     .sort((a, b) => a[0] - b[0]).map(([, c]) => c);
-  const remote = state.stockSearch.q === q ? state.stockSearch.codes : [];
+  const ss = state.stockSearch;
+  const remote = ss.q === q && ss.kind === state.kind ? ss.codes : [];
   return [...new Set([...local, ...remote])];
 }
 function renderStockMarket(body) {
+  const M = kindMk();
   if (!configured) {
-    body.innerHTML = `<div class="empty">미국 주식은 Supabase 연결 정보를 넣은 뒤에 볼 수 있어요</div>`;
+    body.innerHTML = `<div class="empty">주식은 Supabase 연결 정보를 넣은 뒤에 볼 수 있어요</div>`;
     return;
   }
   const q = $("#q").value.trim().toLowerCase();
   const codes = stockListCodes();
-  const loading = q && state.stockSearch.q === q && state.stockSearch.loading;
-  const err = state.stockError
-    ? `<div class="notice"><b>미국 주식 시세를 불러오지 못했어요</b><small>${esc(state.stockError)}</small>
+  const ss = state.stockSearch;
+  const loading = q && ss.q === q && ss.kind === state.kind && ss.loading;
+  const err = state.mk[M].error
+    ? `<div class="notice"><b>${MK_NAME[M]} 주식 시세를 불러오지 못했어요</b><small>${esc(state.mk[M].error)}</small>
         <div style="margin-top:12px"><button class="btn ghost" data-action="retry-stock">다시 시도</button></div></div>` : "";
   let list;
   if (codes.length) {
@@ -1068,52 +1159,62 @@ function renderStockMarket(body) {
   } else if (loading) {
     list = `<div class="empty">찾는 중…</div>`;
   } else {
-    const hint = /[ㄱ-ㅎ가-힣]/.test(q) ? "<br>한글 이름은 인기 종목만 찾을 수 있어요. 영문 이름이나 티커로 찾아 보세요." : "";
+    const hint = M === "US" && /[ㄱ-ㅎ가-힣]/.test(q) ? "<br>한글 이름은 인기 종목만 찾을 수 있어요. 영문 이름이나 티커로 찾아 보세요." : "";
     list = `<div class="empty">"${esc(q)}"에 맞는 종목이 없어요${hint}</div>`;
   }
-  body.innerHTML = err + `<div class="market-note" id="marketNote"></div>`
-    + (q ? "" : `<h2 style="margin-top:4px">인기 미국 주식·ETF</h2>`) + list;
+  body.innerHTML = err + `<div class="market-note" id="marketNote" data-mk="${M}"></div>`
+    + (q ? "" : `<h2 style="margin-top:4px">인기 ${MK_NAME[M]} 주식·ETF</h2>`) + list;
   renderSessionInfo();
 }
 
-// 영문 이름·티커로 전체 미국 주식 검색 (입력이 멈추면 한 번)
+// 전체 종목 검색 (입력이 멈추면 한 번): 국내는 이름·코드, 미국은 영문 이름·티커
 let searchTimer = 0, searchSeq = 0;
 function scheduleStockSearch() {
   clearTimeout(searchTimer);
+  const kind = state.kind, M = kindMk();
   const q = $("#q").value.trim().toLowerCase();
-  const ascii = q && !/[ㄱ-ㅎ가-힣]/.test(q) && configured;
-  state.stockSearch = { q, codes: [], loading: !!ascii };
-  if (!ascii) return;
+  const ok = q && configured && (M === "KR" || !/[ㄱ-ㅎ가-힣]/.test(q));
+  state.stockSearch = { q, kind, codes: [], loading: !!ok };
+  if (!ok) return;
   const seq = ++searchSeq;
   searchTimer = setTimeout(async () => {
     let codes = [];
     try {
-      const j = await stockApi({ action: "search", q });
+      const j = await stockApi(M, { action: "search", q });
       codes = j.results.map((r) => {
-        const code = "US:" + r.symbol;
+        const sym = M === "KR" ? r.code : r.symbol;
+        const code = `${M}:${sym}`;
         const s = state.stocks.get(code);
-        if (!s) state.stocks.set(code, { code, sym: r.symbol, ko: null, en: r.name, exch: r.exchange, alias: "" });
-        else if (!s.exch) s.exch = r.exchange;
+        if (!s) {
+          state.stocks.set(code, M === "KR"
+            ? { code, sym, ko: r.name, en: "", exch: r.market, alias: "" }
+            : { code, sym, ko: null, en: r.name, exch: r.exchange, alias: "" });
+        } else if (!s.exch) s.exch = M === "KR" ? r.market : r.exchange;
         return code;
       });
     } catch (_) {}
     if (seq !== searchSeq) return;
-    state.stockSearch = { q, codes, loading: false };
+    state.stockSearch = { q, kind, codes, loading: false };
     renderMarket();
     loadStockQuotes(visibleStockCodes());
   }, 350);
 }
+const PLACEHOLDER = {
+  coin: "코인 이름이나 기호 검색 (예: 비트, BTC)",
+  kr: "종목 이름이나 코드 검색 (예: 삼성전자)",
+  us: "종목 이름이나 티커 검색 (예: 애플, TSLA)",
+};
 function setKind(kind) {
   state.kind = kind;
   document.querySelectorAll("[data-kind]").forEach((b) => b.classList.toggle("on", b.dataset.kind === kind));
   const q = $("#q");
   q.value = "";
-  q.placeholder = kind === "stock" ? "종목 이름이나 티커 검색 (예: 애플, TSLA)" : "코인 이름이나 기호 검색 (예: 비트, BTC)";
+  q.placeholder = PLACEHOLDER[kind];
   clearTimeout(searchTimer);
-  state.stockSearch = { q: "", codes: [], loading: false };
+  state.stockSearch = { q: "", kind, codes: [], loading: false };
   window.scrollTo(0, 0);
   renderMarket();
-  if (kind === "stock") loadStockQuotes(visibleStockCodes());
+  if (kind !== "coin") loadStockQuotes(visibleStockCodes());
 }
 
 /* ---------------- 뉴스 ---------------- */
@@ -1154,8 +1255,9 @@ async function refreshNews() {
     try { const j = await error.context.json(); if (j.error) msg = j.error; } catch (_) {}
     toast("뉴스를 가져오지 못했어요: " + msg);
   } else {
-    if (!data.feeds && data.skipped) toast("방금 새로 가져왔어요. 3분 뒤에 다시 눌러 주세요");
-    else toast(data.saved ? `관련 뉴스 ${data.saved}건을 찾았어요` : "새로 나온 관련 뉴스가 없어요");
+    const failNote = data.failed && data.failed.length ? ` (못 읽은 매체: ${data.failed.join(", ")})` : "";
+    if (!data.feeds && data.skipped) toast("방금 새로 가져왔어요. 잠시 뒤에 다시 눌러 주세요");
+    else toast((data.saved ? `관련 뉴스 ${data.saved}건을 새로 찾았어요` : "새로 나온 관련 뉴스가 없어요") + failNote);
   }
   btn.disabled = false;
   btn.textContent = "새로 가져오기";
@@ -1259,9 +1361,9 @@ $("#backdrop").addEventListener("click", closeSheets);
 $("#newsRefresh").addEventListener("click", refreshNews);
 $("#dToggle").addEventListener("click", () => state.detail && toggleWatch(state.detail));
 $("#q").addEventListener("input", () => {
-  if (state.kind === "stock") scheduleStockSearch();
+  if (state.kind !== "coin") scheduleStockSearch();
   renderMarket();
-  if (state.kind === "stock") loadStockQuotes(visibleStockCodes());
+  if (state.kind !== "coin") loadStockQuotes(visibleStockCodes());
 });
 
 // 차트를 누르거나 손가락으로 옆으로 밀면 그 봉의 가격을 보여줘요
@@ -1286,7 +1388,7 @@ document.addEventListener("click", (e) => {
   if (el.dataset.ctype) return setChartType(el.dataset.ctype);
   if (el.dataset.kind) return setKind(el.dataset.kind);
   if (el.dataset.action === "retry-stock") {
-    state.stockError = false;
+    state.mk.KR.error = state.mk.US.error = false;
     renderMarket();
     return loadStockQuotes(visibleStockCodes(), true);
   }
