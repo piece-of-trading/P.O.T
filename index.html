@@ -91,8 +91,33 @@ h2{font-size:15px;font-weight:700;margin:18px 2px 10px;color:var(--muted)}
 .news-item .s{font-size:13px;color:var(--muted);line-height:1.5;margin-top:6px}
 .news-item .m{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12px;color:var(--muted);margin-top:10px}
 .chip{background:var(--surface-2);color:var(--text);border-radius:6px;padding:2px 7px;font-weight:600}
-.news-bar{display:flex;align-items:center;justify-content:space-between;margin:14px 2px 10px}
-.news-bar h2{margin:0}
+.news-kinds{position:sticky;top:calc(env(safe-area-inset-top) + 56px);z-index:5;background:var(--bg);padding:2px 0 10px}
+.news-kinds .ranges{margin:0}
+
+/* 제목 + 버튼 줄 */
+.bar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:14px 2px 10px;min-height:34px}
+.bar h2{margin:0}
+.bar-actions{display:flex;gap:6px;flex:none}
+.pill.solid{background:var(--accent);color:var(--accent-text)}
+.pill:disabled{opacity:.5}
+
+/* 관심목록 편집 */
+.edit-hint{font-size:12px;color:var(--muted);line-height:1.55;margin:-2px 2px 4px}
+.sec-h{margin:18px 2px 8px}
+.sec-move{display:flex;gap:4px}
+.sec-move button{width:36px;height:30px;border-radius:9px;background:var(--surface-2);display:grid;place-items:center}
+.sec-move button:disabled{opacity:.3}
+.sec-move svg,.handle svg,.del svg{width:18px;height:18px}
+.edit-list{position:relative}
+.row.edit-row{background:var(--surface);padding:6px 0 6px 4px;gap:4px;position:relative}
+.edit-row .r-name{padding:6px 0}
+.del{width:40px;height:40px;border-radius:10px;flex:none;display:grid;place-items:center;color:var(--up)}
+.handle{width:52px;height:44px;flex:none;display:grid;place-items:center;color:var(--muted);touch-action:none;cursor:grab;-webkit-touch-callout:none}
+.edit-row.removing .r-name{opacity:.4}
+.edit-row.removing .r-name b{text-decoration:line-through}
+.edit-row.removing .del{color:var(--text)}
+.edit-row.dragging{z-index:3;border-radius:12px;box-shadow:0 0 0 1px var(--line),0 8px 22px rgba(0,0,0,.2)}
+body.dragging{-webkit-user-select:none;user-select:none;cursor:grabbing}
 
 /* 하단 탭 */
 nav{
@@ -197,7 +222,7 @@ nav button.on{color:var(--text)}
 
   <!-- 관심목록 -->
   <section id="tab-watch">
-    <h2 id="watchTitle">관심목록</h2>
+    <div class="bar"><h2 id="watchTitle">관심목록</h2><div class="bar-actions" id="watchActions"></div></div>
     <div id="watchBody"></div>
   </section>
 
@@ -216,10 +241,11 @@ nav button.on{color:var(--text)}
 
   <!-- 뉴스 -->
   <section id="tab-news" class="hidden">
-    <div class="news-bar">
+    <div class="bar">
       <h2>관심목록 뉴스</h2>
       <button class="pill" id="newsRefresh">새로 가져오기</button>
     </div>
+    <div class="news-kinds hidden" id="newsKindsWrap"><div class="ranges" id="newsKinds"></div></div>
     <div id="newsBody"></div>
   </section>
 
@@ -341,6 +367,8 @@ const state = {
   },
   stockAt: new Map(),   // code -> 마지막으로 현재가를 받은 시각
   stockSearch: { q: "", kind: "coin", codes: [], loading: false },
+  edit: null,           // 관심목록 편집 중일 때 초안 { sections: [{ k, label, items }], removed: Set, saving }
+  newsKind: (() => { try { return localStorage.getItem("pot.newsKind") || "all"; } catch (_) { return "all"; } })(),
 };
 
 const $ = (s) => document.querySelector(s);
@@ -351,6 +379,30 @@ const isKR = (code) => String(code).startsWith("KR:");
 const isStock = (code) => isUS(code) || isKR(code);
 const mkOf = (code) => (isKR(code) ? "KR" : "US");
 const symOf = (code) => code.replace(/^(KRW-|US:|KR:)/, "");
+const kindOf = (code) => (isKR(code) ? "kr" : isUS(code) ? "us" : "coin");
+
+/* 관심목록 구역 (기본 순서: 코인 → 국내 → 미국) */
+const SECTIONS = [
+  { k: "coin", label: "코인" },
+  { k: "kr", label: "국내 주식", M: "KR" },
+  { k: "us", label: "미국 주식", M: "US" },
+];
+// 종목 순서: 저장된 순서값, 같으면 담은 시각 순
+const bySort = (a, b) => a.sort - b.sort || (a.created < b.created ? -1 : a.created > b.created ? 1 : 0);
+// 구역 순서는 각 구역에서 가장 앞선 종목의 순서값으로 정해요 (같으면 기본 순서)
+function watchSections(list = state.watch) {
+  return SECTIONS.map((s, i) => {
+    const items = list.filter((w) => kindOf(w.code) === s.k);
+    return { ...s, i, items, key: items.length ? Math.min(...items.map((w) => w.sort)) : Infinity };
+  }).filter((g) => g.items.length).sort((a, b) => a.key - b.key || a.i - b.i);
+}
+const ICON = {
+  minus: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M8 12h8"/></svg>`,
+  undo: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg>`,
+  grip: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 8h14M5 12h14M5 16h14"/></svg>`,
+  up: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 15 6-6 6 6"/></svg>`,
+  down: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>`,
+};
 
 /* 인기 미국 주식·ETF (한글 이름으로도 찾을 수 있게)
    [티커, 한글 이름, 영문 이름, 다른 이름(검색용)] */
@@ -976,7 +1028,8 @@ async function loadWatch() {
   state.watch = (data || []).map((r) => {
     const a = r.assets;
     if (!a) return null;
-    if (a.type === "coin") return { asset_id: r.asset_id, code: a.symbol, name: a.name };
+    const order = { sort: Number(r.sort_order) || 0, created: r.created_at || "" };
+    if (a.type === "coin") return { asset_id: r.asset_id, code: a.symbol, name: a.name, ...order };
     if (a.type !== "stock") return null; // 아직 지원하지 않는 자산 (부동산 등)
     const country = a.meta && a.meta.country;
     const kr = country === "KR" || (!country && KR_MARKETS.has(a.market));
@@ -986,11 +1039,12 @@ async function loadWatch() {
     const s = state.stocks.get(code);
     if (!s) state.stocks.set(code, { code, sym: a.symbol, ko: kr ? a.name : null, en: kr ? "" : a.name, exch: a.market, alias: "" });
     else if (!s.exch) s.exch = a.market;
-    return { asset_id: r.asset_id, code, name: nameOf(code) };
-  }).filter(Boolean);
+    return { asset_id: r.asset_id, code, name: nameOf(code), ...order };
+  }).filter(Boolean).sort(bySort);
   state.watchLoaded = true;
   renderWatch();
   renderMarket();
+  if (state.tab === "news") loadNews(); // 뉴스는 관심목록을 알아야 구역을 나눌 수 있어요
   loadSparks();
   loadStockQuotes(visibleStockCodes());
 }
@@ -1021,9 +1075,10 @@ async function toggleWatch(code) {
     }
     if (res.error) return toast("추가하지 못했어요: " + res.error.message);
     const assetId = res.data;
-    const { error: e2 } = await sb.from("watchlist").insert({ user_id: state.session.user.id, asset_id: assetId });
+    const sort = state.watch.reduce((m, w) => Math.max(m, w.sort), 0) + 1; // 새로 담은 종목은 맨 뒤로
+    const { error: e2 } = await sb.from("watchlist").insert({ user_id: state.session.user.id, asset_id: assetId, sort_order: sort });
     if (e2 && e2.code !== "23505") return toast("추가하지 못했어요: " + e2.message);
-    state.watch.push({ asset_id: assetId, code, name });
+    state.watch.push({ asset_id: assetId, code, name, sort, created: new Date().toISOString() });
     toast("관심목록에 담았어요");
     loadSparks();
   }
@@ -1046,7 +1101,10 @@ const sessionTag = (M) => `<span class="mk hidden" data-session="${M}"></span>`;
 const MK_NAME = { KR: "국내", US: "미국" };
 
 function renderWatch() {
+  if (drag) { pendingWatchRender = true; return; } // 끄는 중에는 다시 그리지 않아요
   const body = $("#watchBody");
+  renderWatchActions();
+  if (state.edit && state.session) return renderEdit(body);
   $("#watchTitle").textContent = state.watch.length ? `관심목록 ${state.watch.length}개` : "관심목록";
   if (!sb || !state.session) {
     const preview = state.order.slice(0, 5);
@@ -1070,25 +1128,225 @@ function renderWatch() {
     body.innerHTML = `<div class="empty">아직 담은 종목이 없어요.<br><br><button class="btn" data-goto="market">찾으러 가기</button></div>`;
     return;
   }
-  const coins = state.watch.filter((w) => !isStock(w.code));
-  const krs = state.watch.filter((w) => isKR(w.code));
-  const uss = state.watch.filter((w) => isUS(w.code));
+  const groups = watchSections();
   let warn = "";
-  if (coins.length && state.marketError)
-    warn += `<div class="notice">코인 시세를 불러오지 못하고 있어요. 찾기 탭에서 ‘다시 시도’를 눌러 주세요.</div>`;
-  for (const [M, list] of [["KR", krs], ["US", uss]]) {
-    if (list.length && state.mk[M].error)
-      warn += `<div class="notice">${MK_NAME[M]} 주식 시세를 불러오지 못하고 있어요.<br><small>${esc(state.mk[M].error)}</small></div>`;
+  for (const g of groups) {
+    if (g.k === "coin" && state.marketError)
+      warn += `<div class="notice">코인 시세를 불러오지 못하고 있어요. 찾기 탭에서 ‘다시 시도’를 눌러 주세요.</div>`;
+    if (g.M && state.mk[g.M].error)
+      warn += `<div class="notice">${MK_NAME[g.M]} 주식 시세를 불러오지 못하고 있어요.<br><small>${esc(state.mk[g.M].error)}</small></div>`;
   }
-  const section = (title, list) => `<h2>${title}</h2><div class="cards">${list.map(cardHTML).join("")}</div>`;
-  const groups = [coins, krs, uss].filter((l) => l.length).length;
-  body.innerHTML = warn
-    + (coins.length ? (groups > 1 ? section("코인", coins) : `<div class="cards">${coins.map(cardHTML).join("")}</div>`) : "")
-    + (krs.length ? section(`국내 주식 ${sessionTag("KR")}`, krs) : "")
-    + (uss.length ? section(`미국 주식 ${sessionTag("US")}`, uss) : "");
+  // 구역이 하나뿐인 코인 목록은 제목 없이 보여줘요 (주식은 장 상태 때문에 제목을 둬요)
+  body.innerHTML = warn + groups.map((g) =>
+    (groups.length > 1 || g.M ? `<h2>${g.label}${g.M ? " " + sessionTag(g.M) : ""}</h2>` : "")
+    + `<div class="cards">${g.items.map(cardHTML).join("")}</div>`).join("");
   state.watch.forEach((w) => drawSpark(w.code));
   renderSessionInfo();
 }
+
+/* ---------------- 관심목록 편집 (순서 바꾸기 · 빼기) ----------------
+   편집하는 동안은 초안만 바꾸고, ‘완료’를 누르면 한 번에 저장해요 */
+function renderWatchActions() {
+  const el = $("#watchActions");
+  const e = state.edit;
+  if (!sb || !state.session || !state.watchLoaded || (!state.watch.length && !e)) { el.innerHTML = ""; return; }
+  el.innerHTML = e
+    ? `<button class="pill" data-action="edit-cancel" ${e.saving ? "disabled" : ""}>취소</button>
+       <button class="pill solid" data-action="edit-done" ${e.saving ? "disabled" : ""}>${e.saving ? "저장 중…" : "완료"}</button>`
+    : `<button class="pill" data-action="edit">편집</button>`;
+}
+function startEdit() {
+  if (!state.watch.length) return;
+  state.edit = {
+    sections: watchSections().map((g) => ({ k: g.k, label: g.label, items: g.items.slice() })),
+    removed: new Set(),
+    saving: false,
+  };
+  renderWatch();
+}
+function cancelEdit() {
+  state.edit = null;
+  renderWatch();
+}
+// 편집하는 동안 다른 곳에서 담거나 뺀 종목을 초안에 반영해요
+function syncDraft() {
+  const e = state.edit;
+  const ids = new Set(state.watch.map((w) => String(w.asset_id)));
+  const seen = new Set();
+  e.removed.forEach((id) => { if (!ids.has(id)) e.removed.delete(id); });
+  e.sections.forEach((s) => {
+    s.items = s.items.filter((w) => ids.has(String(w.asset_id)));
+    s.items.forEach((w) => seen.add(String(w.asset_id)));
+  });
+  for (const w of state.watch) {
+    if (seen.has(String(w.asset_id))) continue;
+    let s = e.sections.find((x) => x.k === kindOf(w.code));
+    if (!s) {
+      const d = SECTIONS.find((x) => x.k === kindOf(w.code));
+      s = { k: d.k, label: d.label, items: [] };
+      e.sections.push(s);
+    }
+    s.items.push(w);
+  }
+}
+function editRowHTML(w, removed) {
+  const id = esc(String(w.asset_id));
+  return `<div class="row edit-row${removed ? " removing" : ""}" data-eid="${id}">
+    <button class="del" data-del="${id}" aria-label="${removed ? "되돌리기" : esc(w.name) + " 빼기"}">${removed ? ICON.undo : ICON.minus}</button>
+    <div class="r-name"><b>${esc(w.name)}</b><span>${esc(subOf(w.code))}</span></div>
+    <span class="handle" data-handle role="button" aria-label="${esc(w.name)} 끌어서 옮기기">${ICON.grip}</span>
+  </div>`;
+}
+function renderEdit(body) {
+  syncDraft();
+  const e = state.edit;
+  $("#watchTitle").textContent = "관심목록 편집";
+  const vis = e.sections.filter((s) => s.items.length);
+  const n = e.removed.size;
+  body.innerHTML = `<p class="edit-hint">오른쪽 ≡ 를 잡고 위아래로 끌면 순서가 바뀌어요.${vis.length > 1 ? " 구역 순서는 구역 이름 옆 화살표로 바꿔요." : ""}`
+    + `${n ? `<br><b style="color:var(--up)">${n}개를 관심목록에서 뺄 거예요.</b>` : ""}</p>`
+    + vis.map((s, i) => `
+      <div class="bar sec-h"><h2>${s.label}</h2>${vis.length > 1 ? `<div class="sec-move">
+        <button data-secmove="${s.k}" data-dir="-1" ${i === 0 ? "disabled" : ""} aria-label="${s.label} 구역을 위로">${ICON.up}</button>
+        <button data-secmove="${s.k}" data-dir="1" ${i === vis.length - 1 ? "disabled" : ""} aria-label="${s.label} 구역을 아래로">${ICON.down}</button>
+      </div>` : ""}</div>
+      <div class="list edit-list" data-sec="${s.k}">${s.items.map((w) => editRowHTML(w, e.removed.has(String(w.asset_id)))).join("")}</div>`).join("");
+}
+function moveSection(k, d) {
+  const e = state.edit;
+  if (!e || e.saving) return;
+  const vis = e.sections.filter((s) => s.items.length);
+  const i = vis.findIndex((s) => s.k === k), j = i + d;
+  if (i < 0 || j < 0 || j >= vis.length) return;
+  const a = e.sections.indexOf(vis[i]), b = e.sections.indexOf(vis[j]);
+  [e.sections[a], e.sections[b]] = [e.sections[b], e.sections[a]];
+  renderWatch();
+}
+function toggleRemove(id) {
+  const e = state.edit;
+  if (!e || e.saving) return;
+  if (e.removed.has(id)) e.removed.delete(id); else e.removed.add(id);
+  renderWatch();
+}
+async function saveEdit() {
+  const e = state.edit;
+  if (!e || e.saving) return;
+  syncDraft();
+  const gone = (w) => e.removed.has(String(w.asset_id));
+  const keep = e.sections.flatMap((s) => s.items).filter((w) => !gone(w));
+  const removed = state.watch.filter(gone);
+  const before = watchSections().flatMap((g) => g.items).filter((w) => !gone(w)).map((w) => String(w.asset_id)).join();
+  const after = keep.map((w) => String(w.asset_id)).join();
+  const moved = before !== after;
+  if (!removed.length && !moved) return cancelEdit();
+  e.saving = true;
+  renderWatchActions();
+  if (removed.length) {
+    const { error } = await sb.from("watchlist").delete().in("asset_id", removed.map((w) => w.asset_id));
+    if (error) {
+      e.saving = false;
+      renderWatchActions();
+      return toast("빼지 못했어요: " + error.message);
+    }
+    state.watch = state.watch.filter((w) => !gone(w));
+  }
+  if (moved) {
+    const { error } = await sb.rpc("reorder_watchlist", { p_asset_ids: keep.map((w) => String(w.asset_id)) });
+    if (error) {
+      e.saving = false;
+      renderWatch(); // 빼기는 이미 저장됐을 수 있으니 초안을 다시 맞춰요
+      renderMarket();
+      return toast(/reorder_watchlist/.test(error.message)
+        ? "순서 저장용 SQL(setup_v5_watch_order.sql)을 먼저 실행해 주세요"
+        : "순서를 저장하지 못했어요: " + error.message);
+    }
+    keep.forEach((w, i) => { w.sort = i + 1; });
+    state.watch = [...keep, ...state.watch.filter((w) => !keep.includes(w))].sort(bySort);
+  }
+  state.edit = null;
+  renderWatch();
+  renderMarket();
+  toast(removed.length && moved ? `순서를 저장하고 ${removed.length}개를 뺐어요`
+    : removed.length ? `${removed.length}개를 관심목록에서 뺐어요` : "순서를 저장했어요");
+}
+
+/* 손잡이(≡)를 끌어서 같은 구역 안에서 순서 바꾸기 (손가락·마우스 모두) */
+let drag = null, pendingWatchRender = false;
+function dragUpdate() {
+  const { row, list } = drag;
+  const max = list.clientHeight - row.offsetHeight;
+  const y = Math.min(max, Math.max(0, drag.y - list.getBoundingClientRect().top - drag.grab));
+  // 끄는 줄의 아래 끝이 다음 줄 가운데를 넘거나, 위 끝이 이전 줄 가운데를 넘으면 자리를 바꿔요
+  for (let guard = 0; guard < 100; guard++) {
+    const prev = row.previousElementSibling, next = row.nextElementSibling;
+    if (next && y + row.offsetHeight > next.offsetTop + next.offsetHeight / 2) slideAside(next, () => list.insertBefore(next, row));
+    else if (prev && y < prev.offsetTop + prev.offsetHeight / 2) slideAside(prev, () => list.insertBefore(row, prev));
+    else break;
+  }
+  row.style.transform = `translateY(${y - row.offsetTop}px)`;
+}
+// 옆 줄이 자리를 비켜 줄 때 부드럽게 움직여요
+function slideAside(el, move) {
+  const before = el.offsetTop;
+  move();
+  el.style.transition = "none";
+  el.style.transform = `translateY(${before - el.offsetTop}px)`;
+  void el.offsetWidth;
+  el.style.transition = "transform .15s ease";
+  el.style.transform = "";
+}
+// 화면 위아래 끝으로 끌면 저절로 스크롤해요
+function dragFrame() {
+  if (!drag) return;
+  const top = $("header").getBoundingClientRect().bottom + 36;
+  const bottom = $("nav").getBoundingClientRect().top - 36;
+  const v = drag.y < top ? -Math.min(16, (top - drag.y) / 3) : drag.y > bottom ? Math.min(16, (drag.y - bottom) / 3) : 0;
+  if (v) {
+    const y0 = window.scrollY;
+    window.scrollBy(0, v);
+    if (window.scrollY !== y0) dragUpdate();
+  }
+  drag.raf = requestAnimationFrame(dragFrame);
+}
+document.addEventListener("pointerdown", (e) => {
+  const h = e.target.closest("[data-handle]");
+  if (!h || !state.edit || state.edit.saving || drag) return;
+  if (e.pointerType === "mouse" && e.button !== 0) return;
+  e.preventDefault();
+  const row = h.closest(".edit-row"), list = row.parentElement;
+  try { h.setPointerCapture(e.pointerId); } catch (_) {}
+  drag = { row, list, id: e.pointerId, y: e.clientY, grab: e.clientY - list.getBoundingClientRect().top - row.offsetTop, raf: 0 };
+  row.style.transition = "none";
+  row.classList.add("dragging");
+  document.body.classList.add("dragging");
+  drag.raf = requestAnimationFrame(dragFrame);
+});
+document.addEventListener("pointermove", (e) => {
+  if (!drag || e.pointerId !== drag.id) return;
+  e.preventDefault();
+  drag.y = e.clientY;
+  dragUpdate();
+}, { passive: false });
+function endDrag(e) {
+  if (!drag || e.pointerId !== drag.id) return;
+  const { row, list } = drag;
+  cancelAnimationFrame(drag.raf);
+  drag = null;
+  document.body.classList.remove("dragging");
+  row.style.transition = "transform .15s ease";
+  row.style.transform = "";
+  setTimeout(() => { row.classList.remove("dragging"); row.style.transition = ""; }, 160);
+  // 화면에 놓인 순서를 초안에 옮겨 적어요
+  const s = state.edit && state.edit.sections.find((x) => x.k === list.dataset.sec);
+  if (s) {
+    const byId = new Map(s.items.map((w) => [String(w.asset_id), w]));
+    const ordered = [...list.children].map((el) => byId.get(el.dataset.eid)).filter(Boolean);
+    s.items = [...ordered, ...s.items.filter((w) => !ordered.includes(w))];
+  }
+  if (pendingWatchRender) { pendingWatchRender = false; setTimeout(renderWatch, 170); }
+}
+document.addEventListener("pointerup", endDrag);
+document.addEventListener("pointercancel", endDrag);
 
 /* ---------------- 찾기 (코인 / 국내 주식 / 미국 주식) ---------------- */
 function rowHTML(code) {
@@ -1218,28 +1476,88 @@ function setKind(kind) {
 }
 
 /* ---------------- 뉴스 ---------------- */
+/* 뉴스 구역: 전체 / 코인 / 국내 주식 / 미국 주식 (관심목록에 있는 구역만, 관심목록 구역 순서대로) */
+const NEWS_LIMIT = 60;
+const NEWS_KIND_LABEL = { all: "전체", coin: "코인", kr: "국내 주식", us: "미국 주식" };
+const newsCache = new Map(); // "구역|종목들" -> { at, list } (1분 동안 다시 쓰기)
+let newsSeq = 0;
+function newsKinds() {
+  const ks = watchSections().map((g) => g.k);
+  return ks.length > 1 ? ["all", ...ks] : ks;
+}
+function setNewsKind(k) {
+  state.newsKind = k;
+  try { localStorage.setItem("pot.newsKind", k); } catch (_) {}
+  window.scrollTo(0, 0);
+  loadNews();
+}
+// 고른 구역의 종목에 연결된 뉴스를 최신순으로 받아요
+async function fetchNews(items, all) {
+  const byId = new Map(state.watch.map((w) => [String(w.asset_id), w]));
+  const { data, error } = await sb.from("news")
+    .select("id,title,url,source,published_at,news_assets!inner(asset_id)")
+    .in("news_assets.asset_id", items.map((w) => w.asset_id))
+    .order("published_at", { ascending: false, nullsFirst: false })
+    .limit(NEWS_LIMIT);
+  if (!error) {
+    return data.map((n) => ({ ...n, names: (n.news_assets || []).map((x) => byId.get(String(x.asset_id))).filter(Boolean).map((w) => w.name) }));
+  }
+  // 예비: 예전 방식(my_news)으로 받아 종목 이름으로 구역을 나눠요
+  const r = await sb.rpc("my_news", { p_limit: 200 });
+  if (r.error) throw new Error(r.error.message);
+  const want = new Set(items.map((w) => w.name));
+  return (r.data || [])
+    .filter((n) => all || (n.asset_names || []).some((nm) => want.has(nm)))
+    .slice(0, NEWS_LIMIT)
+    .map((n) => ({ ...n, names: all ? n.asset_names || [] : (n.asset_names || []).filter((nm) => want.has(nm)) }));
+}
 async function loadNews() {
-  const body = $("#newsBody");
+  const body = $("#newsBody"), wrap = $("#newsKindsWrap");
   if (!sb || !state.session) {
+    wrap.classList.add("hidden");
     body.innerHTML = `<div class="notice"><b>로그인이 필요해요</b>관심목록에 담은 종목의 뉴스만 모아서 보여드려요.
       <div style="margin-top:12px"><button class="btn" data-action="login">로그인</button></div></div>`;
     return;
   }
-  body.innerHTML = `<div class="skeleton"></div>`;
-  const { data, error } = await sb.rpc("my_news", { p_limit: 60 });
-  if (error) { body.innerHTML = `<div class="empty">뉴스를 불러오지 못했어요<br>${esc(error.message)}</div>`; return; }
-  if (!data.length) {
-    body.innerHTML = `<div class="empty">${state.watch.length
-      ? "아직 모인 뉴스가 없어요.<br>위의 ‘새로 가져오기’를 눌러 보세요."
-      : "관심목록에 종목을 담으면 관련 뉴스가 여기 모여요."}</div>`;
+  if (!state.watchLoaded) { wrap.classList.add("hidden"); body.innerHTML = `<div class="skeleton"></div>`; return; }
+  const kinds = newsKinds();
+  const kind = kinds.includes(state.newsKind) ? state.newsKind : kinds[0] || "all";
+  wrap.classList.toggle("hidden", kinds.length < 2);
+  $("#newsKinds").innerHTML = kinds.map((k) =>
+    `<button data-newskind="${k}" class="${k === kind ? "on" : ""}">${NEWS_KIND_LABEL[k]}</button>`).join("");
+  if (!state.watch.length) {
+    body.innerHTML = `<div class="empty">관심목록에 종목을 담으면 관련 뉴스가 여기 모여요.</div>`;
     return;
   }
-  body.innerHTML = data.map((n) => `
-    <a class="news-item" href="${esc(n.url)}" target="_blank" rel="noopener noreferrer">
+  const items = kind === "all" ? state.watch : state.watch.filter((w) => kindOf(w.code) === kind);
+  const key = kind + "|" + items.map((w) => w.asset_id).join(",");
+  const seq = ++newsSeq;
+  const hit = newsCache.get(key);
+  if (hit && Date.now() - hit.at < 60000) return renderNews(hit.list, kind);
+  body.innerHTML = `<div class="skeleton"></div><div class="skeleton" style="margin-top:10px"></div>`;
+  try {
+    const list = await fetchNews(items, kind === "all" || kinds.length < 2);
+    if (seq !== newsSeq) return;
+    newsCache.set(key, { at: Date.now(), list });
+    renderNews(list, kind);
+  } catch (e) {
+    if (seq !== newsSeq) return;
+    body.innerHTML = `<div class="empty">뉴스를 불러오지 못했어요<br>${esc(e.message || e)}</div>`;
+  }
+}
+function renderNews(list, kind) {
+  const body = $("#newsBody");
+  if (!list.length) {
+    const what = kind === "all" || newsKinds().length < 2 ? "뉴스가" : `${NEWS_KIND_LABEL[kind]} 뉴스가`;
+    body.innerHTML = `<div class="empty">아직 모인 ${what} 없어요.<br>위의 ‘새로 가져오기’를 눌러 보세요.</div>`;
+    return;
+  }
+  const safeUrl = (u) => (/^https?:\/\//i.test(u || "") ? u : "#");
+  body.innerHTML = list.map((n) => `
+    <a class="news-item" href="${esc(safeUrl(n.url))}" target="_blank" rel="noopener noreferrer">
       <div class="t">${esc(n.title)}</div>
-      ${n.summary ? `<div class="s">${esc(n.summary)}</div>` : ""}
-      <div class="m">${(n.asset_names || []).map((a) => `<span class="chip">${esc(a)}</span>`).join("")}
-        <span>${esc(n.source || "")}</span><span>· ${ago(n.published_at)}</span></div>
+      <div class="m">${(n.names || []).map((a) => `<span class="chip">${esc(a)}</span>`).join("")}
+        <span>${esc(n.source || "")}</span>${n.published_at ? `<span>· ${ago(n.published_at)}</span>` : ""}</div>
     </a>`).join("");
 }
 
@@ -1261,6 +1579,7 @@ async function refreshNews() {
   }
   btn.disabled = false;
   btn.textContent = "새로 가져오기";
+  newsCache.clear();
   loadNews();
 }
 
@@ -1328,6 +1647,8 @@ function setSession(session) {
   $("#accountBtn").textContent = session ? "내 계정" : "로그인";
   if (session) $("#accEmail").textContent = session.user.email || "";
   state.watchLoaded = false;
+  state.edit = null;
+  newsCache.clear();
   state.spark.clear();
   loadWatch();
   if (state.tab === "news") loadNews();
@@ -1383,10 +1704,16 @@ window.addEventListener("resize", () => {
 
 // 화면 곳곳의 버튼 클릭을 한곳에서 처리
 document.addEventListener("click", (e) => {
-  const el = e.target.closest("[data-star],[data-open],[data-tab],[data-goto],[data-action],[data-range],[data-ctype],[data-kind],[data-close]");
+  const el = e.target.closest("[data-star],[data-open],[data-tab],[data-goto],[data-action],[data-range],[data-ctype],[data-kind],[data-close],[data-newskind],[data-secmove],[data-del]");
   if (!el) return;
   if (el.dataset.ctype) return setChartType(el.dataset.ctype);
   if (el.dataset.kind) return setKind(el.dataset.kind);
+  if (el.dataset.newskind) return setNewsKind(el.dataset.newskind);
+  if (el.dataset.secmove) return moveSection(el.dataset.secmove, Number(el.dataset.dir));
+  if (el.dataset.del) return toggleRemove(el.dataset.del);
+  if (el.dataset.action === "edit") return startEdit();
+  if (el.dataset.action === "edit-cancel") return cancelEdit();
+  if (el.dataset.action === "edit-done") return saveEdit();
   if (el.dataset.action === "retry-stock") {
     state.mk.KR.error = state.mk.US.error = false;
     renderMarket();
